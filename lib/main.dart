@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'pages/learn_page.dart';
-import 'pages/map_page.dart';
-import 'pages/profile_page.dart';
-import 'pages/quest_page.dart';
-import 'pages/settings_page.dart';
-import 'pages/statistics_page.dart';
+
+import 'pages/login_page.dart';
+import 'pages/main_page.dart';
+import 'services/auth_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,118 +23,96 @@ class MyApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF101414),
       ),
-      home: const MainPage(),
+      home: const AuthGate(),
     );
   }
 }
 
 // ============================================================
-// MAIN PAGE + BOTTOM NAVIGATION
+// AUTH GATE — cek sesi login saat aplikasi dibuka
 // ============================================================
+// Sudah pernah masuk  -> langsung ke MainPage
+// Belum / sudah keluar -> tampilkan LoginPage
 
-class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
 
   @override
-  State<MainPage> createState() => _MainPageState();
+  State<AuthGate> createState() => _AuthGateState();
 }
 
-class _MainPageState extends State<MainPage> {
-  int currentIndex = 0;
-  bool isEnglish = false;
+class _AuthGateState extends State<AuthGate> {
+  late final Future<String?> _session;
 
-  void changeLanguage() {
-    setState(() {
-      isEnglish = !isEnglish;
-    });
-  }
-
-  void changePage(int index) {
-    setState(() {
-      currentIndex = index;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _session = Auth.currentUser();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      QuestPage(
-        isEnglish: isEnglish,
-        onLanguageChanged: changeLanguage,
+    return FutureBuilder<String?>(
+      future: _session,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _SplashScreen();
+        }
 
-        // MULAI -> MAP (halaman sub, bukan tab)
-        onStartPressed: () {
-          changePage(4);
-        },
+        final String? username = snapshot.data;
+        if (username == null || username.isEmpty) {
+          return const LoginPage();
+        }
 
-        // MATERI -> LEARN (halaman sub, bukan tab)
-        onMateriPressed: () {
-          changePage(5);
-        },
-      ),
-
-      StatisticsPage(isEnglish: isEnglish, onLanguageChanged: changeLanguage),
-
-      SettingsPage(isEnglish: isEnglish, onLanguageChanged: changeLanguage),
-
-      ProfilePage(isEnglish: isEnglish, onLanguageChanged: changeLanguage),
-
-      // Halaman sub (dibuka dari Quest, tiada di bottom nav)
-      MapPage(
-        isEnglish: isEnglish,
-        onLanguageChanged: changeLanguage,
-        onBack: () => changePage(0),
-      ),
-
-      LearnPage(
-        isEnglish: isEnglish,
-        onLanguageChanged: changeLanguage,
-        onBack: () => changePage(0),
-      ),
-    ];
-
-    // Tab Map & Learn diganti dengan Statistics & Settings.
-    // Map & Learn kini halaman sub -> bottom nav disembunyikan.
-    final bool isSubPage = currentIndex >= 4;
-
-    return Scaffold(
-      body: pages[currentIndex],
-
-      bottomNavigationBar: isSubPage
-          ? null
-          : BottomNavigationBar(
-              currentIndex: currentIndex,
-              onTap: changePage,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: const Color(0xFF181D1C),
-              selectedItemColor: const Color(0xFF48D8FF),
-              unselectedItemColor: Colors.white70,
-              selectedFontSize: 13,
-              unselectedFontSize: 13,
-              items: [
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.sports_esports_outlined),
-                  activeIcon: const Icon(Icons.sports_esports),
-                  label: 'Quest',
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.insights_outlined),
-                  activeIcon: const Icon(Icons.insights),
-                  label: 'Statistics',
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.settings_outlined),
-                  activeIcon: const Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-                BottomNavigationBarItem(
-                  icon: const Icon(Icons.person_outline),
-                  activeIcon: const Icon(Icons.person),
-                  label: 'Profile',
-                ),
-              ],
-            ),
+        return MainPage(username: username);
+      },
     );
   }
 }
 
+// ============================================================
+// LAYAR PEMBUKA (saat mengecek sesi)
+// ============================================================
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101414),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: Image.asset(
+                'assets/images/logo_algoquest.png',
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.auto_awesome,
+                    size: 60,
+                    color: Colors.black,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 26),
+            const CircularProgressIndicator(
+              color: Color(0xFF48D8FF),
+              strokeWidth: 3,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

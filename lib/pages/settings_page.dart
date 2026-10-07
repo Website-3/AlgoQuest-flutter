@@ -10,10 +10,14 @@ class SettingsPage extends StatefulWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
 
+  /// Dipanggil saat tombol "Keluar" ditekan (logout dari sesi).
+  final VoidCallback? onLogout;
+
   const SettingsPage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
+    this.onLogout,
   });
 
   @override
@@ -164,7 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       width: double.infinity,
                       height: 52,
                       child: OutlinedButton(
-                        onPressed: () {},
+                        onPressed: widget.onLogout,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFFFF5A5A),
                           side: const BorderSide(color: Color(0xFF7A2E2E)),

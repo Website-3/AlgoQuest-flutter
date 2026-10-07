@@ -11,10 +11,14 @@ class ProfilePage extends StatelessWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
 
+  /// Nama pengguna hasil login; kosong jika belum login.
+  final String username;
+
   const ProfilePage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
+    this.username = '',
   });
 
   @override
@@ -89,9 +93,11 @@ class ProfilePage extends StatelessWidget {
                           const SizedBox(height: 16),
 
                           Text(
-                            isEnglish
-                                ? 'AlgoQuest Player'
-                                : 'Pemain AlgoQuest',
+                            username.isNotEmpty
+                                ? username
+                                : (isEnglish
+                                      ? 'AlgoQuest Player'
+                                      : 'Pemain AlgoQuest'),
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,

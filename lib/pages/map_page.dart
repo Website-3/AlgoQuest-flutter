@@ -1,11 +1,152 @@
 import 'package:flutter/material.dart';
+
 import '../widgets/app_header.dart';
 
 // ============================================================
-// MAP PAGE
+// MAP PAGE — PETA DUNIA
 // ============================================================
+// 5 wilayah x 3 level = 15 level.
+//
+// ATURAN PROGRES:
+//   1. Wilayah 1 terbuka dari awal.
+//   2. Di dalam 1 wilayah, level berikutnya terbuka begitu level
+//      sebelumnya selesai (bintang 1 pun cukup untuk membuka).
+//   3. Untuk PINDAH ke wilayah berikutnya, SEMUA level di wilayah
+//      ini harus minimal 2 bintang.
+//   4. Dapat 1 bintang -> wajib mengulang dulu agar bintang naik,
+//      baru wilayah berikutnya terbuka.
+//   5. Progres hanya di memori (tidak disimpan ke HP).
 
-class MapPage extends StatelessWidget {
+// ============================================================
+// DATA WILAYAH
+// ============================================================
+class GameRegion {
+  final String nameId;
+  final String nameEn;
+  final String materialId;
+  final String materialEn;
+  final Color color;
+  final IconData icon;
+
+  const GameRegion({
+    required this.nameId,
+    required this.nameEn,
+    required this.materialId,
+    required this.materialEn,
+    required this.color,
+    required this.icon,
+  });
+
+  String name(bool isEnglish) => isEnglish ? nameEn : nameId;
+
+  String material(bool isEnglish) => isEnglish ? materialEn : materialId;
+}
+
+const List<GameRegion> gameRegions = <GameRegion>[
+  GameRegion(
+    nameId: 'Wilayah 1 - Hutan Algoritma',
+    nameEn: 'Region 1 - Algorithm Forest',
+    materialId: 'Materi algoritma dan urutan instruksi.',
+    materialEn: 'Materials: algorithms and instruction sequence.',
+    color: Color(0xFF59C36A),
+    icon: Icons.forest,
+  ),
+  GameRegion(
+    nameId: 'Wilayah 2 - Lembah Variabel',
+    nameEn: 'Region 2 - Variable Valley',
+    materialId: 'Materi variabel dan operator.',
+    materialEn: 'Materials: variables and operators.',
+    color: Color(0xFF42CFFF),
+    icon: Icons.data_object,
+  ),
+  GameRegion(
+    nameId: 'Wilayah 3 - Gerbang Percabangan',
+    nameEn: 'Region 3 - Branching Gate',
+    materialId: 'Materi kondisi dan percabangan.',
+    materialEn: 'Materials: conditions and branching.',
+    color: Color(0xFFFFB21A),
+    icon: Icons.alt_route,
+  ),
+  GameRegion(
+    nameId: 'Wilayah 4 - Labirin Perulangan',
+    nameEn: 'Region 4 - Loop Maze',
+    materialId: 'Materi perulangan.',
+    materialEn: 'Materials: loops.',
+    color: Color(0xFFB07CFF),
+    icon: Icons.all_inclusive,
+  ),
+  GameRegion(
+    nameId: 'Wilayah 5 - Benteng Logika',
+    nameEn: 'Region 5 - Logic Fortress',
+    materialId: 'Tantangan gabungan.',
+    materialEn: 'Combined challenges.',
+    color: Color(0xFFFF6B4A),
+    icon: Icons.shield,
+  ),
+];
+
+// ============================================================
+// PROGRES (HANYA DI MEMORI)
+// ============================================================
+class MapProgress {
+  MapProgress._();
+
+  static const int regionCount = 5;
+  static const int levelsPerRegion = 3;
+  static const int totalLevels = regionCount * levelsPerRegion; // 15
+  static const int maxStars = 3;
+  static const int requiredStars = 2; // syarat pindah wilayah
+
+  /// Bintang tiap level. Index = wilayah * 3 + level. 0 = belum selesai.
+  static final List<int> stars = List<int>.filled(totalLevels, 0);
+
+  static int indexOf(int region, int level) => region * levelsPerRegion + level;
+
+  static int starsOf(int region, int level) => stars[indexOf(region, level)];
+
+  static void setStars(int region, int level, int value) {
+    stars[indexOf(region, level)] = value.clamp(0, maxStars);
+  }
+
+  /// Semua level di wilayah ini sudah >= 2 bintang?
+  static bool isRegionReady(int region) {
+    for (var level = 0; level < levelsPerRegion; level++) {
+      if (starsOf(region, level) < requiredStars) return false;
+    }
+    return true;
+  }
+
+  /// Wilayah terbuka? (Wilayah 1 selalu terbuka)
+  static bool isRegionUnlocked(int region) {
+    if (region <= 0) return true;
+    return isRegionReady(region - 1);
+  }
+
+  /// Level terbuka? (Level 1 terbuka jika wilayahnya terbuka)
+  static bool isLevelUnlocked(int region, int level) {
+    if (!isRegionUnlocked(region)) return false;
+    if (level == 0) return true;
+    return starsOf(region, level - 1) >= 1;
+  }
+
+  /// Total bintang dalam 1 wilayah (maks 9).
+  static int regionStars(int region) {
+    var total = 0;
+    for (var level = 0; level < levelsPerRegion; level++) {
+      total += starsOf(region, level);
+    }
+    return total;
+  }
+
+  static int completedLevels() => stars.where((s) => s > 0).length;
+
+  static int totalStars() => stars.fold<int>(0, (sum, s) => sum + s);
+}
+
+// ============================================================
+// HALAMAN PETA
+// ============================================================
+class MapPage extends StatefulWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
   final VoidCallback? onBack;
@@ -18,6 +159,190 @@ class MapPage extends StatelessWidget {
   });
 
   @override
+  State<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends State<MapPage> {
+  bool get _en => widget.isEnglish;
+
+  // ----------------------------------------------------------
+  // Ketuk level yang terbuka -> dialog simulasi bintang
+  // ----------------------------------------------------------
+  Future<void> _openLevel(int region, int level) async {
+    final GameRegion r = gameRegions[region];
+    final int before = MapProgress.starsOf(region, level);
+    final bool wasReady = MapProgress.isRegionReady(region);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _levelDialog(ctx, region, level, r, before),
+    );
+
+    if (!mounted) return;
+
+    final bool nowReady = MapProgress.isRegionReady(region);
+    setState(() {});
+
+    if (!wasReady && nowReady) {
+      final String msg = region < gameRegions.length - 1
+          ? (_en
+                ? 'Region ${region + 2} unlocked!'
+                : 'Wilayah ${region + 2} terbuka!')
+          : (_en
+                ? 'All regions cleared - you finished AlgoQuest!'
+                : 'Semua wilayah selesai - kamu menuntaskan AlgoQuest!');
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF164653),
+            content: Text(msg),
+          ),
+        );
+    }
+  }
+
+  // ----------------------------------------------------------
+  // DIALOG LEVEL
+  // ----------------------------------------------------------
+  Widget _levelDialog(
+    BuildContext ctx,
+    int region,
+    int level,
+    GameRegion r,
+    int before,
+  ) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF202524),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Row(
+        children: [
+          Icon(r.icon, color: r.color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${r.name(_en)} - Level ${level + 1}',
+              style: const TextStyle(fontSize: 15, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            r.material(_en),
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Text(
+                _en ? 'Current stars' : 'Bintang saat ini',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const Spacer(),
+              _starRow(before, size: 17),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          if (before == 0)
+            _noteBox(
+              icon: Icons.info_outline,
+              color: const Color(0xFF8DE7F5),
+              text: _en
+                  ? 'Choose the stars you earned in this round.'
+                  : 'Pilih bintang yang kamu peroleh di ronde ini.',
+            )
+          else if (before == 1)
+            _noteBox(
+              icon: Icons.replay,
+              color: const Color(0xFFFFC15C),
+              text: _en
+                  ? 'Only 1 star - you must replay to earn more before moving on.'
+                  : 'Bintang 1 - kamu harus mengulang agar bintang bertambah sebelum melanjut.',
+            )
+          else
+            _noteBox(
+              icon: Icons.check_circle_outline,
+              color: const Color(0xFF59C36A),
+              text: _en
+                  ? '2+ stars - this level qualifies for the next region.'
+                  : 'Bintang 2+ - level ini sudah cukup untuk pindah wilayah.',
+            ),
+
+          const SizedBox(height: 18),
+
+          Text(
+            _en ? 'Choose your result:' : 'Pilih hasil permainanmu:',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              for (var value = 1; value <= 3; value++)
+                _starChoice(
+                  ctx: ctx,
+                  region: region,
+                  level: level,
+                  value: value,
+                  color: r.color,
+                  selected: before == value,
+                ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(
+            _en ? 'Close' : 'Tutup',
+            style: const TextStyle(color: Colors.white70),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Level terkunci disentuh -> beri tahu syaratnya.
+  void _showLocked(int region, int level) {
+    final String msg;
+    if (!MapProgress.isRegionUnlocked(region)) {
+      final String prev = gameRegions[region - 1].name(_en);
+      msg = _en
+          ? 'Locked. Earn at least 2 stars on every level of $prev.'
+          : 'Terkunci. Dapatkan minimal 2 bintang di semua level $prev.';
+    } else {
+      msg = _en
+          ? 'Locked. Finish Level $level first.'
+          : 'Terkunci. Selesaikan Level $level dulu.';
+    }
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(backgroundColor: const Color(0xFF2A2320), content: Text(msg)),
+      );
+  }
+
+  // ----------------------------------------------------------
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF101414),
@@ -26,135 +351,32 @@ class MapPage extends StatelessWidget {
           children: [
             AppHeader(
               title: 'Map',
-              isEnglish: isEnglish,
-              onLanguageChanged: onLanguageChanged,
-              onBack: onBack,
+              isEnglish: _en,
+              onLanguageChanged: widget.onLanguageChanged,
+              onBack: widget.onBack,
             ),
 
             Expanded(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 30),
                 child: Column(
                   children: [
                     const SizedBox(height: 10),
+                    _overviewCard(),
+                    const SizedBox(height: 18),
 
-                    // CHAPTER
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF202524),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Peta Dunia',
-                                  style: TextStyle(
-                                    fontSize: 25,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 5),
-                                Text(
-                                  'Chapter 1: The Basics',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          Container(
-                            width: 45,
-                            height: 45,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF064A50),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.map,
-                              color: Color(0xFF8DE7F5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 25),
-
-                    // MAP LEVELS
-                    _MapLevel(
-                      number: '🔥',
-                      color: const Color(0xFFD90B1C),
-                      stars: '☆ ★ ☆',
-                      label: 'Lv 10',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '9',
-                      color: const Color(0xFF555B5A),
-                      stars: '',
-                      label: '',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '8',
-                      color: const Color(0xFF414746),
-                      stars: '',
-                      label: '',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '🏆',
-                      color: const Color(0xFF09B5D6),
-                      stars: '☆ ☆ ☆',
-                      label: 'Lv 7',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '6',
-                      color: const Color(0xFFC5E0E5),
-                      textColor: Colors.black,
-                      stars: '☆ ☆ ☆',
-                      label: '',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '5',
-                      color: const Color(0xFFC5E0E5),
-                      textColor: Colors.black,
-                      stars: '☆ ☆ ★',
-                      label: '',
-                    ),
-
-                    _MapLine(),
-
-                    _MapLevel(
-                      number: '4',
-                      color: const Color(0xFFC5E0E5),
-                      textColor: Colors.black,
-                      stars: '☆ ☆ ☆',
-                      label: '',
-                    ),
-
-                    const SizedBox(height: 40),
+                    for (
+                      var region = 0;
+                      region < gameRegions.length;
+                      region++
+                    ) ...[
+                      _regionCard(region),
+                      if (region < gameRegions.length - 1)
+                        _gate(
+                          unlocked: MapProgress.isRegionUnlocked(region + 1),
+                          color: gameRegions[region + 1].color,
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -164,99 +386,608 @@ class MapPage extends StatelessWidget {
       ),
     );
   }
-}
 
-class _MapLevel extends StatelessWidget {
-  final String number;
-  final Color color;
-  final Color textColor;
-  final String stars;
-  final String label;
+  // ----------------------------------------------------------
+  // KARTU RINGKASAN
+  // ----------------------------------------------------------
+  Widget _overviewCard() {
+    final int done = MapProgress.completedLevels();
+    final int stars = MapProgress.totalStars();
+    final int maxTotal = MapProgress.totalLevels * MapProgress.maxStars;
 
-  const _MapLevel({
-    required this.number,
-    required this.color,
-    this.textColor = Colors.white,
-    required this.stars,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 95,
-      child: Stack(
-        alignment: Alignment.center,
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF202524),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (label.isNotEmpty)
-            Positioned(
-              left: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C201F),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Row(
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                alignment: Alignment.center,
-                child: Text(
-                  number,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _en ? 'World Map' : 'Peta Dunia',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _en ? '5 Regions - 15 Levels' : '5 Wilayah - 15 Level',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              if (stars.isNotEmpty)
-                Text(
-                  stars,
-                  style: const TextStyle(
-                    color: Color(0xFFFFC9A2),
-                    fontSize: 17,
-                  ),
+              Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF064A50),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: const Icon(Icons.map, color: Color(0xFF8DE7F5)),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Text(
+                _en ? 'Levels' : 'Level selesai',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const Spacer(),
+              Text(
+                '$done / ${MapProgress.totalLevels}',
+                style: const TextStyle(
+                  color: Color(0xFF42CFFF),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 6),
+
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: done / MapProgress.totalLevels,
+              minHeight: 8,
+              backgroundColor: const Color(0xFF2A302F),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF42CFFF)),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFFFC15C),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _en ? 'Total stars' : 'Total bintang',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const Spacer(),
+              Text(
+                '$stars / $maxTotal',
+                style: const TextStyle(
+                  color: Color(0xFFFFC15C),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
-}
 
-class _MapLine extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
+  // ----------------------------------------------------------
+  // KARTU WILAYAH
+  // ----------------------------------------------------------
+  Widget _regionCard(int region) {
+    final GameRegion r = gameRegions[region];
+    final bool unlocked = MapProgress.isRegionUnlocked(region);
+    final bool ready = unlocked && MapProgress.isRegionReady(region);
+    final int stars = MapProgress.regionStars(region);
+    final int maxStars = MapProgress.levelsPerRegion * MapProgress.maxStars;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF202524),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: unlocked ? r.color.withValues(alpha: 0.55) : Colors.white10,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ---- HEADER WILAYAH ----
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: unlocked
+                      ? r.color.withValues(alpha: 0.18)
+                      : const Color(0xFF2A302F),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  unlocked ? r.icon : Icons.lock_outline,
+                  color: unlocked ? r.color : Colors.white38,
+                  size: 24,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      r.name(_en),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: unlocked ? Colors.white : Colors.white54,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      r.material(_en),
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // ---- STATUS + BINTANG ----
+          Row(
+            children: [
+              const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFFFC15C),
+                size: 15,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '$stars / $maxStars',
+                style: const TextStyle(
+                  color: Color(0xFFFFC15C),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12.5,
+                ),
+              ),
+
+              const Spacer(),
+
+              _statusChip(
+                unlocked: unlocked,
+                ready: ready,
+                isLast: region == gameRegions.length - 1,
+              ),
+            ],
+          ),
+
+          // ---- PESAN SYARAT ----
+          if (!unlocked) ...[
+            const SizedBox(height: 12),
+            _noteBox(
+              icon: Icons.lock_outline,
+              color: Colors.white54,
+              text: _en
+                  ? 'Locked. Earn at least 2 stars on every level of '
+                        '${gameRegions[region - 1].name(_en)}.'
+                  : 'Terkunci. Dapatkan minimal 2 bintang di semua level '
+                        '${gameRegions[region - 1].name(_en)}.',
+            ),
+          ] else if (ready && region == gameRegions.length - 1) ...[
+            const SizedBox(height: 12),
+            _noteBox(
+              icon: Icons.emoji_events_outlined,
+              color: const Color(0xFFFFC15C),
+              text: _en
+                  ? 'All 5 regions cleared - you conquered AlgoQuest!'
+                  : 'Semua 5 wilayah selesai - kamu menaklukkan AlgoQuest!',
+            ),
+          ] else if (ready && region < gameRegions.length - 1) ...[
+            const SizedBox(height: 12),
+            _noteBox(
+              icon: Icons.check_circle_outline,
+              color: const Color(0xFF59C36A),
+              text: _en
+                  ? 'All levels have 2+ stars - the next region is open!'
+                  : 'Semua level sudah 2 bintang - wilayah berikutnya terbuka!',
+            ),
+          ],
+
+          const SizedBox(height: 18),
+
+          // ---- JALUR 3 LEVEL ----
+          for (var level = 0; level < MapProgress.levelsPerRegion; level++) ...[
+            _levelNode(region, level),
+            if (level < MapProgress.levelsPerRegion - 1)
+              _pathLine(
+                color: r.color,
+                active: MapProgress.isLevelUnlocked(region, level + 1),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // TOMBOL STATUS
+  // ----------------------------------------------------------
+  Widget _statusChip({
+    required bool unlocked,
+    required bool ready,
+    bool isLast = false,
+  }) {
+    final Color color;
+    final String label;
+    final IconData icon;
+
+    if (!unlocked) {
+      color = Colors.white54;
+      label = _en ? 'LOCKED' : 'TERKUNCI';
+      icon = Icons.lock_outline;
+    } else if (ready) {
+      color = const Color(0xFF59C36A);
+      if (isLast) {
+        label = _en ? 'CLEARED' : 'SELESAI';
+        icon = Icons.emoji_events_outlined;
+      } else {
+        label = _en ? 'NEXT OPEN' : 'SIAP PINDAH';
+        icon = Icons.lock_open;
+      }
+    } else {
+      color = const Color(0xFFFFC15C);
+      label = _en ? '2 STARS NEEDED' : 'BUTUH 2 BINTANG';
+      icon = Icons.star_border;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // SIMPUL LEVEL (LINGKARAN)
+  // ----------------------------------------------------------
+  Widget _levelNode(int region, int level) {
+    final GameRegion r = gameRegions[region];
+    final bool unlocked = MapProgress.isLevelUnlocked(region, level);
+    final int stars = MapProgress.starsOf(region, level);
+
+    final Color fill;
+    final Color border;
+    final Widget child;
+
+    if (!unlocked) {
+      fill = const Color(0xFF171C1B);
+      border = Colors.white10;
+      child = const Icon(Icons.lock_outline, color: Colors.white30, size: 26);
+    } else if (stars > 0) {
+      fill = r.color;
+      border = r.color;
+      child = Text(
+        '${level + 1}',
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: r.color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+        ),
+      );
+    } else {
+      fill = const Color(0xFF171C1B);
+      border = r.color;
+      child = Text(
+        '${level + 1}',
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: r.color,
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: unlocked
+          ? () => _openLevel(region, level)
+          : () => _showLocked(region, level),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 74,
+              height: 74,
+              decoration: BoxDecoration(
+                color: fill,
+                shape: BoxShape.circle,
+                border: Border.all(color: border, width: unlocked ? 2 : 1),
+                boxShadow: stars >= 2
+                    ? [
+                        BoxShadow(
+                          color: r.color.withValues(alpha: 0.35),
+                          blurRadius: 16,
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: child,
+            ),
+
+            const SizedBox(height: 7),
+
+            Text(
+              'Level ${level + 1}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: unlocked ? Colors.white70 : Colors.white30,
+              ),
+            ),
+
+            const SizedBox(height: 4),
+
+            if (unlocked)
+              _starRow(stars, size: 17)
+            else
+              Text(
+                _en ? 'Locked' : 'Terkunci',
+                style: const TextStyle(fontSize: 10.5, color: Colors.white30),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // GARIS PENGIKAT LEVEL
+  // ----------------------------------------------------------
+  Widget _pathLine({required Color color, required bool active}) {
     return SizedBox(
-      height: 35,
+      height: 30,
       child: Center(
         child: Container(
-          width: 7,
-          height: 35,
+          width: 6,
+          height: 30,
           decoration: BoxDecoration(
-            color: Colors.white10,
+            color: active ? color.withValues(alpha: 0.55) : Colors.white10,
             borderRadius: BorderRadius.circular(10),
           ),
         ),
       ),
     );
   }
-}
 
+  // ----------------------------------------------------------
+  // GERBANG ANTAR WILAYAH
+  // ----------------------------------------------------------
+  Widget _gate({required bool unlocked, required Color color}) {
+    final Color c = unlocked ? color : Colors.white30;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        children: [
+          Container(
+            width: 6,
+            height: 26,
+            decoration: BoxDecoration(
+              color: unlocked ? color.withValues(alpha: 0.5) : Colors.white10,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C201F),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: c.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  unlocked ? Icons.lock_open : Icons.lock,
+                  size: 13,
+                  color: c,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  unlocked
+                      ? (_en ? 'GATE OPEN' : 'GERBANG TERBUKA')
+                      : (_en ? 'GATE LOCKED' : 'GERBANG TERKUNCI'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    color: c,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // BINTANG
+  // ----------------------------------------------------------
+  Widget _starRow(int value, {double size = 18}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+          child: Icon(
+            i < value ? Icons.star_rounded : Icons.star_border_rounded,
+            size: size,
+            color: i < value ? const Color(0xFFFFC15C) : Colors.white24,
+          ),
+        );
+      }),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // KOTAK INFO
+  // ----------------------------------------------------------
+  Widget _noteBox({
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontSize: 11.5, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------
+  // PILIH BINTANG (DI DALAM DIALOG)
+  // ----------------------------------------------------------
+  Widget _starChoice({
+    required BuildContext ctx,
+    required int region,
+    required int level,
+    required int value,
+    required Color color,
+    required bool selected,
+  }) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.of(ctx).pop();
+          MapProgress.setStars(region, level, value);
+        },
+        child: Container(
+          height: 76,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.16)
+                : const Color(0xFF141A19),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : Colors.white12,
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.star_rounded,
+                size: 24,
+                color: value >= 2 ? const Color(0xFFFFC15C) : Colors.white38,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$value',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                _en ? 'star' : 'bintang',
+                style: const TextStyle(color: Colors.white54, fontSize: 9.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

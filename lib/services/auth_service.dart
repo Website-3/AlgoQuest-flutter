@@ -74,9 +74,15 @@ class Auth {
 
   /// Verifikasi login.
   /// Mengembalikan null jika berhasil, atau pesan error jika gagal.
+  ///
+  /// [rememberMe] = true  -> sesi disimpan, app langsung masuk lagi
+  ///                         saat dibuka berikutnya
+  /// [rememberMe] = false -> sesi hanya berlaku selama app masih berjalan,
+  ///                         saat dibuka lagi harus login ulang.
   static Future<String?> login({
     required String username,
     required String password,
+    bool rememberMe = true,
   }) async {
     final name = username.trim();
     final accounts = await _loadAccounts();
@@ -89,7 +95,13 @@ class Auth {
       return 'Kata sandi salah.';
     }
 
-    await _setSession(name);
+    if (rememberMe) {
+      await _setSession(name);
+    } else {
+      // Tidak mengingat -> hapus sesi tersimpan (jika ada)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keySession);
+    }
     return null;
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'auth_gate.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/register_page.dart';
@@ -12,6 +13,14 @@ import 'pages/register_page.dart';
 
 class AppRoutes {
   AppRoutes._();
+
+  /// Dari splash -> cek sesi login (AuthGate).
+  static void openGate(BuildContext context) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGate()),
+      (route) => false,
+    );
+  }
 
   /// Buka halaman Masuk (login) — semua halaman lama dibuang.
   static void openLogin(BuildContext context) {

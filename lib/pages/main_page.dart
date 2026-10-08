@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_routes.dart';
 import '../services/auth_service.dart';
 import 'learn_page.dart';
+import 'game_page.dart';
 import 'map_page.dart';
 import 'profile_page.dart';
 import 'quest_page.dart';
@@ -26,6 +27,10 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int currentIndex = 0;
   bool isEnglish = false;
+
+  // Level yang sedang dimainkan di GamePage (index 6).
+  int gameRegion = 0;
+  int gameLevel = 0;
 
   void changeLanguage() {
     setState(() {
@@ -82,12 +87,31 @@ class _MainPageState extends State<MainPage> {
         isEnglish: isEnglish,
         onLanguageChanged: changeLanguage,
         onBack: () => changePage(0),
+
+        // Ketuk level -> langsung masuk halaman permainan
+        onStartLevel: (int region, int level) {
+          setState(() {
+            gameRegion = region;
+            gameLevel = level;
+            currentIndex = 6;
+          });
+        },
       ),
 
       LearnPage(
         isEnglish: isEnglish,
         onLanguageChanged: changeLanguage,
         onBack: () => changePage(0),
+      ),
+
+      // Halaman inti permainan (index 6, sub-page -> tanpa bottom nav)
+      GamePage(
+        region: gameRegion,
+        level: gameLevel,
+        isEnglish: isEnglish,
+        onLanguageChanged: changeLanguage,
+        onBack: () => changePage(4),
+        onFinished: (int stars) => changePage(4),
       ),
     ];
 

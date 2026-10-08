@@ -151,11 +151,16 @@ class MapPage extends StatefulWidget {
   final VoidCallback onLanguageChanged;
   final VoidCallback? onBack;
 
+  /// Bila diisi, mengetuk level langsung membuka halaman permainan
+  /// (GamePage). Bila null, level membuka dialog simulasi bintang.
+  final void Function(int region, int level)? onStartLevel;
+
   const MapPage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
     this.onBack,
+    this.onStartLevel,
   });
 
   @override
@@ -169,6 +174,12 @@ class _MapPageState extends State<MapPage> {
   // Ketuk level yang terbuka -> dialog simulasi bintang
   // ----------------------------------------------------------
   Future<void> _openLevel(int region, int level) async {
+    // Mode permainan sesungguhnya -> buka GamePage.
+    if (widget.onStartLevel != null) {
+      widget.onStartLevel!(region, level);
+      return;
+    }
+
     final GameRegion r = gameRegions[region];
     final int before = MapProgress.starsOf(region, level);
     final bool wasReady = MapProgress.isRegionReady(region);

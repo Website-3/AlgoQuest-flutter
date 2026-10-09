@@ -1,1254 +1,463 @@
-import 'package:flutter/material.dart';
+import 'dart:math';
 
 // ============================================================
-// GAME SERVICE
+// MESIN PERMAINAN — LABIRIN + MONSTER
 // ============================================================
-// Berisi:
-//   1. Blok perintah (BlockType) yang bisa disusun pemain.
-//   2. Definisi 15 level / 5 wilayah sesuai materi AlgoQuest.
-//   3. Mesin eksekusi (GameEngine) yang menjalankan susunan blok
-//      langkah demi langkah agar bisa dianimasikan di layar.
+// Pemain menyusun blok perintah (Maju / Belok / Serang) untuk
+// mengantar karakter menembus labirin, lalu mengalahkan monster.
+// Setelah monster kalah, pemain lanjut menjawab soal (tahap
+// berikutnya).
 //
-// Peta memakai karakter:
-//   #  dinding          .  jalur kosong
-//   S  titik mulai      ^ > v <  titik mulai + arah hadap
-//   G  gerbang/tujuan   E  musuh/boss
-//   *  kristal (variabel)
+// Tingkat kesulitan naik dari Wilayah 1 (mudah) ke Wilayah 5
+// (paling sulit): ukuran labirin makin besar dan HP monster
+// makin tinggi.
+
+// 0 = atas, 1 = kanan, 2 = bawah, 3 = kiri
+const List<int> _dr = <int>[-1, 0, 1, 0];
+const List<int> _dc = <int>[0, 1, 0, -1];
 
 // ------------------------------------------------------------
-// ARAH HADAP KARAKTER
+// KOORDINAT
 // ------------------------------------------------------------
-enum Direction { up, right, down, left }
+class Pos {
+  final int row;
+  final int col;
 
-extension DirectionX on Direction {
-  Direction get turnRight => Direction.values[(index + 1) % 4];
-  Direction get turnLeft => Direction.values[(index + 3) % 4];
+  const Pos(this.row, this.col);
 
-  /// (baris, kolom) langkah ke arah hadap.
-  (int, int) get vector {
-    if (this == Direction.up) return (0, -1);
-    if (this == Direction.right) return (1, 0);
-    if (this == Direction.down) return (0, 1);
-    return (-1, 0);
-  }
+  @override
+  bool operator ==(Object other) =>
+      other is Pos && other.row == row && other.col == col;
 
-  /// Sudut putar ikon panah (rad).
-  double get angle {
-    if (this == Direction.right) return 1.5708;
-    if (this == Direction.down) return 3.14159;
-    if (this == Direction.left) return -1.5708;
-    return 0;
-  }
-
-  String nameId(bool en) {
-    if (this == Direction.up) return en ? 'North' : 'Utara';
-    if (this == Direction.right) return en ? 'East' : 'Timur';
-    if (this == Direction.down) return en ? 'South' : 'Selatan';
-    return en ? 'West' : 'Barat';
-  }
+  @override
+  int get hashCode => row * 1000 + col;
 }
 
 // ------------------------------------------------------------
-// OPERATOR ARITMATIKA & PERBANDINGAN
+// PERINTAH & BLOK
 // ------------------------------------------------------------
-enum ValueOp { add, sub, mul, div }
+enum GameCommand { forward, turnRight, turnLeft, attack }
 
-extension ValueOpX on ValueOp {
-  String get symbol {
-    if (this == ValueOp.add) return '+';
-    if (this == ValueOp.sub) return '-';
-    if (this == ValueOp.mul) return '×';
-    return '÷';
-  }
-
-  ValueOp get next => ValueOp.values[(index + 1) % 4];
-
-  int apply(int a, int b) {
-    if (this == ValueOp.add) return a + b;
-    if (this == ValueOp.sub) return a - b;
-    if (this == ValueOp.mul) return a * b;
-    if (b == 0) return a;
-    return a ~/ b;
-  }
-}
-
-enum CompareOp { gte, lte, eq }
-
-extension CompareOpX on CompareOp {
-  String get symbol {
-    if (this == CompareOp.gte) return '≥';
-    if (this == CompareOp.lte) return '≤';
-    return '=';
-  }
-
-  CompareOp get next => CompareOp.values[(index + 1) % 4];
-
-  bool test(int a, int b) {
-    if (this == CompareOp.gte) return a >= b;
-    if (this == CompareOp.lte) return a <= b;
-    return a == b;
-  }
-}
-
-// ------------------------------------------------------------
-// JENIS BLOK PERINTAH
-// ------------------------------------------------------------
-enum BlockKind {
-  forward, // Maju()
-  backward, // Mundur()
-  turnRight, // Putar(Kanan)
-  turnLeft, // Putar(Kiri)
-  attack, // Serang()
-  collect, // Ambil()
-  addValue, // nilai = nilai + n
-  repeat, // Ulangi(n) { }
-  whileOpen, // Selama(depan kosong) { }
-  ifOpen, // Jika(depan kosong) { } else { }
-  ifEnemy, // Jika(ada musuh) { } else { }
-  ifValue, // Jika(nilai >= n) { } else { }
-}
-
-/// Deskripsi tampilan satu jenis blok.
-class BlockType {
-  final BlockKind kind;
-  final String codeId;
-  final String codeEn;
-  final Color color;
-  final IconData icon;
-  final bool container;
-
-  const BlockType({
-    required this.kind,
-    required this.codeId,
-    required this.codeEn,
-    required this.color,
-    required this.icon,
-    this.container = false,
-  });
-
-  String code(bool en) => en ? codeEn : codeId;
-}
-
-const Map<BlockKind, BlockType> kBlockTypes = <BlockKind, BlockType>{
-  BlockKind.forward: BlockType(
-    kind: BlockKind.forward,
-    codeId: 'Maju()',
-    codeEn: 'Move()',
-    color: Color(0xFF42CFFF),
-    icon: Icons.arrow_upward,
-  ),
-  BlockKind.backward: BlockType(
-    kind: BlockKind.backward,
-    codeId: 'Mundur()',
-    codeEn: 'Back()',
-    color: Color(0xFF08A9C8),
-    icon: Icons.arrow_downward,
-  ),
-  BlockKind.turnRight: BlockType(
-    kind: BlockKind.turnRight,
-    codeId: 'Putar(Kanan)',
-    codeEn: 'Turn(Right)',
-    color: Color(0xFF42CFFF),
-    icon: Icons.rotate_right,
-  ),
-  BlockKind.turnLeft: BlockType(
-    kind: BlockKind.turnLeft,
-    codeId: 'Putar(Kiri)',
-    codeEn: 'Turn(Left)',
-    color: Color(0xFF42CFFF),
-    icon: Icons.rotate_left,
-  ),
-  BlockKind.attack: BlockType(
-    kind: BlockKind.attack,
-    codeId: 'Serang()',
-    codeEn: 'Attack()',
-    color: Color(0xFFFF6B4A),
-    icon: Icons.gps_fixed,
-  ),
-  BlockKind.collect: BlockType(
-    kind: BlockKind.collect,
-    codeId: 'Ambil()',
-    codeEn: 'Collect()',
-    color: Color(0xFF59C36A),
-    icon: Icons.diamond,
-  ),
-  BlockKind.addValue: BlockType(
-    kind: BlockKind.addValue,
-    codeId: 'Ubah Nilai',
-    codeEn: 'Change Var',
-    color: Color(0xFF08A9C8),
-    icon: Icons.calculate,
-  ),
-  BlockKind.repeat: BlockType(
-    kind: BlockKind.repeat,
-    codeId: 'Ulangi',
-    codeEn: 'Repeat',
-    color: Color(0xFFB07CFF),
-    icon: Icons.repeat,
-    container: true,
-  ),
-  BlockKind.whileOpen: BlockType(
-    kind: BlockKind.whileOpen,
-    codeId: 'Selama(depan kosong)',
-    codeEn: 'While(open)',
-    color: Color(0xFF9B6BFF),
-    icon: Icons.all_inclusive,
-    container: true,
-  ),
-  BlockKind.ifOpen: BlockType(
-    kind: BlockKind.ifOpen,
-    codeId: 'Jika(depan kosong)',
-    codeEn: 'If(open)',
-    color: Color(0xFFFFB21A),
-    icon: Icons.alt_route,
-    container: true,
-  ),
-  BlockKind.ifEnemy: BlockType(
-    kind: BlockKind.ifEnemy,
-    codeId: 'Jika(ada musuh)',
-    codeEn: 'If(enemy)',
-    color: Color(0xFFFFB21A),
-    icon: Icons.whatshot,
-    container: true,
-  ),
-  BlockKind.ifValue: BlockType(
-    kind: BlockKind.ifValue,
-    codeId: 'Jika(nilai)',
-    codeEn: 'If(var)',
-    color: Color(0xFFFFB21A),
-    icon: Icons.compare_arrows,
-    container: true,
-  ),
-};
-
-// ------------------------------------------------------------
-// BLOK DALAM SUSUNAN (INSTANCE)
-// ------------------------------------------------------------
-class ScriptBlock {
-  ScriptBlock(this.kind) : type = kBlockTypes[kind]! {
-    if (kind == BlockKind.repeat) count = 3;
-    if (kind == BlockKind.ifValue) operand = 2;
-  }
-
-  final BlockKind kind;
-  final BlockType type;
-
-  /// Jumlah pengulangan (repeat).
-  int count = 1;
-
-  /// Operand operator (nilai) / ambang perbandingan.
-  int operand = 1;
-  ValueOp op = ValueOp.add;
-  CompareOp cmp = CompareOp.gte;
-
-  final List<ScriptBlock> children = <ScriptBlock>[];
-  final List<ScriptBlock> elseChildren = <ScriptBlock>[];
-
-  bool get hasElse =>
-      kind == BlockKind.ifOpen ||
-      kind == BlockKind.ifEnemy ||
-      kind == BlockKind.ifValue;
-
-  /// Teks blok berbahasa Indonesia.
-  String codeId() => _code(false);
-
-  /// Teks blok berbahasa Inggris.
-  String codeEn() => _code(true);
-
-  String _code(bool en) {
-    switch (kind) {
-      case BlockKind.repeat:
-        return en ? 'Repeat($count)' : 'Ulangi($count)';
-      case BlockKind.addValue:
-        return 'nilai = nilai ${op.symbol} $operand';
-      case BlockKind.ifValue:
-        return en
-            ? 'If(var ${cmp.symbol} $operand)'
-            : 'Jika(nilai ${cmp.symbol} $operand)';
-      case BlockKind.whileOpen:
-        return en ? 'While(open)' : 'Selama(depan kosong)';
-      case BlockKind.ifOpen:
-        return en ? 'If(open)' : 'Jika(depan kosong)';
-      case BlockKind.ifEnemy:
-        return en ? 'If(enemy)' : 'Jika(ada musuh)';
-      default:
-        return type.code(en);
+extension GameCommandText on GameCommand {
+  /// Label penuh, dipakai di daftar perintah & blok.
+  String label(bool en) {
+    switch (this) {
+      case GameCommand.forward:
+        return en ? 'Move()' : 'Maju()';
+      case GameCommand.turnRight:
+        return en ? 'TurnRight()' : 'Belok Kanan()';
+      case GameCommand.turnLeft:
+        return en ? 'TurnLeft()' : 'Belok Kiri()';
+      case GameCommand.attack:
+        return en ? 'Attack()' : 'Serang()';
     }
   }
 
-  /// Label baris daftar: "Maju() / Move".
-  String label() {
-    final String id = codeId();
-    final String en = codeEn();
-    return id == en ? id : '$id / $en';
+  /// Label pendek, dipakai di dalam blok yang sudah tersusun.
+  String pill(bool en) {
+    switch (this) {
+      case GameCommand.forward:
+        return en ? 'Move' : 'Maju';
+      case GameCommand.turnRight:
+        return en ? 'Turn \u25B6' : 'Belok \u25B6';
+      case GameCommand.turnLeft:
+        return en ? '\u25C0 Turn' : '\u25C0 Belok';
+      case GameCommand.attack:
+        return en ? 'Attack' : 'Serang';
+    }
   }
 }
 
-/// Menghitung total blok (termasuk blok di dalam kurung).
-int countBlocks(List<ScriptBlock> list) {
-  int total = 0;
-  for (final ScriptBlock b in list) {
-    total += 1 + countBlocks(b.children) + countBlocks(b.elseChildren);
+/// Satu blok pada urutan logika. Beberapa perintah sama yang
+/// berurutan digabung jadi satu blok (seperti "ulangi").
+class CommandBlock {
+  final GameCommand command;
+  int count;
+
+  CommandBlock(this.command, {this.count = 1});
+}
+
+/// Kembangkan blok menjadi barisan perintah tunggal.
+List<GameCommand> expandBlocks(List<CommandBlock> blocks) {
+  final List<GameCommand> out = <GameCommand>[];
+  for (final CommandBlock block in blocks) {
+    for (var i = 0; i < block.count; i++) {
+      out.add(block.command);
+    }
   }
-  return total;
+  return out;
 }
 
 // ------------------------------------------------------------
 // DEFINISI LEVEL
 // ------------------------------------------------------------
-class LevelDefinition {
+class MazeLevel {
   final int region;
   final int level;
-  final String materiId;
-  final String materiEn;
-  final String goalId;
-  final String goalEn;
-  final String tipId;
-  final String tipEn;
-  final List<String> map;
-  final List<BlockKind> palette;
-  final int maxBlocks;
-  final int par;
-  final int enemyHp;
-  final int crystalValue;
-  final int targetValue;
-  final bool needGoal;
-  final bool needCrystals;
-  final bool needEnemy;
+  final int size;
 
-  const LevelDefinition({
+  /// walls[row][col] == true berarti dinding.
+  final List<List<bool>> walls;
+  final Pos start;
+  final int startDir;
+  final Pos monster;
+  final int enemyHp;
+
+  /// Jumlah langkah paling efisien (gerak + belok + serang).
+  final int par;
+
+  /// Kuota blok (setelah perintah berurutan digabung).
+  final int maxBlocks;
+
+  /// Barisan perintah paling efisien (tanpa serangan).
+  final List<GameCommand> solution;
+
+  final String monsterId;
+  final String monsterEn;
+
+  const MazeLevel({
     required this.region,
     required this.level,
-    required this.materiId,
-    required this.materiEn,
-    required this.goalId,
-    required this.goalEn,
-    required this.tipId,
-    required this.tipEn,
-    required this.map,
-    required this.palette,
-    required this.maxBlocks,
+    required this.size,
+    required this.walls,
+    required this.start,
+    required this.startDir,
+    required this.monster,
+    required this.enemyHp,
     required this.par,
-    this.enemyHp = 0,
-    this.crystalValue = 1,
-    this.targetValue = 0,
-    this.needGoal = false,
-    this.needCrystals = false,
-    this.needEnemy = false,
+    required this.maxBlocks,
+    required this.solution,
+    required this.monsterId,
+    required this.monsterEn,
   });
 
-  String materi(bool en) => en ? materiEn : materiId;
-  String goal(bool en) => en ? goalEn : goalId;
-  String tip(bool en) => en ? tipEn : tipId;
+  bool isWall(int row, int col) {
+    if (row < 0 || col < 0 || row >= size || col >= size) return true;
+    return walls[row][col];
+  }
+
+  bool isMonster(int row, int col) => row == monster.row && col == monster.col;
+
+  String monsterName(bool en) => en ? monsterEn : monsterId;
 }
 
-const List<LevelDefinition> kLevels = <LevelDefinition>[
-  // ===== WILAYAH 1 — HUTAN ALGORITMA =====
-  LevelDefinition(
-    region: 0,
-    level: 0,
-    materiId: 'Pengenalan Algoritma',
-    materiEn: 'Introduction to Algorithms',
-    goalId: 'Bawa karakter sampai ke bendera dengan urutan langkah yang benar.',
-    goalEn: 'Bring the character to the flag with the right step order.',
-    tipId: 'Algoritma = daftar langkah berurutan. Coba jalur paling singkat '
-        'dulu: maju, maju, baru belok.',
-    tipEn: 'An algorithm = an ordered list of steps. Try the shortest path '
-        'first: move, move, then turn.',
-    map: <String>[
-      '#####',
-      '#S..#',
-      '#.#G#',
-      '#...#',
-      '#####',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-    ],
-    maxBlocks: 8,
-    par: 4,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 0,
-    level: 1,
-    materiId: 'Urutan Instruksi',
-    materiEn: 'Instruction Sequence',
-    goalId: 'Susun langkah yang masih acak menjadi urutan yang benar '
-        'hingga mencapai tujuan.',
-    goalEn: 'Arrange the random steps into the correct order to reach the goal.',
-    tipId: 'Perhatikan arah hadap karakter. Satu putaran putar = 90 derajat, '
-        'jadi maju dua kali sebelum belok agar tidak meleset.',
-    tipEn: 'Watch the facing direction. One turn = 90 degrees, so move twice '
-        'before turning.',
-    map: <String>[
-      '#####',
-      '#S..#',
-      '##..#',
-      '#..G#',
-      '#####',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.backward,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-    ],
-    maxBlocks: 10,
-    par: 5,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 0,
-    level: 2,
-    materiId: 'Algoritma dalam Kehidupan Sehari-hari',
-    materiEn: 'Algorithms in Daily Life',
-    goalId: 'Ambil semua kristal lalu capai bendera — seperti mengikuti '
-        'resep memasak.',
-    goalEn: 'Collect every crystal then reach the flag — like following a recipe.',
-    tipId: 'Ambil() hanya bekerja saat karakter berdiri di atas kristal.',
-    tipEn: 'Collect() only works while standing on a crystal.',
-    map: <String>[
-      '######',
-      '#S**.#',
-      '#...G#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.collect,
-    ],
-    maxBlocks: 12,
-    par: 7,
-    needGoal: true,
-    needCrystals: true,
-  ),
-
-  // ===== WILAYAH 2 — LEMBAH VARIABEL =====
-  LevelDefinition(
-    region: 1,
-    level: 0,
-    materiId: 'Pengenalan Variabel',
-    materiEn: 'Introduction to Variables',
-    goalId: 'Simpan kristal ke dalam variabel "nilai" hingga nilai ≥ 3.',
-    goalEn: 'Store crystals into the variable "nilai" until nilai >= 3.',
-    tipId: 'Variabel = kotak penyimpan nilai. Tiap Ambil() menambah 1 ke '
-        'variabel bernama nilai.',
-    tipEn: 'A variable = a box holding a value. Each Collect() adds 1 to the '
-        'variable named nilai.',
-    map: <String>[
-      '######',
-      '#S***#',
-      '#....#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.collect,
-      BlockKind.turnRight,
-    ],
-    maxBlocks: 10,
-    par: 6,
-    targetValue: 3,
-  ),
-  LevelDefinition(
-    region: 1,
-    level: 1,
-    materiId: 'Operator Aritmatika',
-    materiEn: 'Arithmetic Operators',
-    goalId: 'Buat variabel "nilai" menjadi ≥ 12 memakai +, -, ×, ÷ '
-        'lalu capai bendera.',
-    goalEn: 'Make "nilai" reach 12 using +, -, x, / then reach the flag.',
-    tipId: 'Ketuk kotak operator untuk mengganti +, -, ×, ÷ dan ketuk angka '
-        'untuk mengubah operand.',
-    tipEn: 'Tap the operator box to switch +, -, x, / and tap the number to '
-        'change the operand.',
-    map: <String>[
-      '######',
-      '#S*..#',
-      '#...G#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.collect,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.addValue,
-    ],
-    maxBlocks: 14,
-    par: 8,
-    targetValue: 12,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 1,
-    level: 2,
-    materiId: 'Operator Perbandingan & Logika',
-    materiEn: 'Comparison & Logic Operators',
-    goalId: 'Ambil kristal, lalu serang musuh hanya jika nilai ≥ 1.',
-    goalEn: 'Collect the crystal, then attack only if nilai >= 1.',
-    tipId: 'Blok Jika(nilai ≥ n) mengecek perbandingan. Bila benar, blok '
-        'di dalamnya dijalankan.',
-    tipEn: 'The If(var >= n) block checks a comparison. When true, the blocks '
-        'inside run.',
-    map: <String>[
-      '#####',
-      '#S*E#',
-      '#...#',
-      '#####',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.collect,
-      BlockKind.attack,
-      BlockKind.ifValue,
-      BlockKind.turnRight,
-    ],
-    maxBlocks: 11,
-    par: 6,
-    enemyHp: 100,
-    needEnemy: true,
-  ),
-
-  // ===== WILAYAH 3 — GERBANG PERCABANGAN =====
-  LevelDefinition(
-    region: 2,
-    level: 0,
-    materiId: 'Konsep Kondisi',
-    materiEn: 'Understanding Conditions',
-    goalId: 'Gunakan kondisi "depan kosong" untuk memilih maju atau belok.',
-    goalEn: 'Use the "front is open" condition to choose move or turn.',
-    tipId: 'Kondisi bernilai benar/salah. Kalau depan tembok, cabang ELSE '
-        'yang dijalankan.',
-    tipEn: 'A condition is true/false. If the front is a wall, the ELSE branch '
-        'runs instead.',
-    map: <String>[
-      '#####',
-      '#S#.#',
-      '#...#',
-      '#..G#',
-      '#####',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.ifOpen,
-      BlockKind.repeat,
-    ],
-    maxBlocks: 13,
-    par: 8,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 2,
-    level: 1,
-    materiId: 'If–Else',
-    materiEn: 'If–Else',
-    goalId: 'Kalau ada musuh di depan maka serang, kalau tidak maju, '
-        'lalu capai bendera.',
-    goalEn: 'If an enemy is ahead then attack, otherwise move, then reach the flag.',
-    tipId: 'Susun blok di dalam LAKUKAN (IF) dan SELAINNYA (ELSE) dengan '
-        'mengetuk zona putus-putus.',
-    tipEn: 'Place blocks inside THEN (IF) and ELSE by tapping the dashed zone.',
-    map: <String>[
-      '######',
-      '#S.EG#',
-      '#.####',
-      '#....#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.attack,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.ifEnemy,
-      BlockKind.collect,
-    ],
-    maxBlocks: 12,
-    par: 7,
-    enemyHp: 100,
-    needEnemy: true,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 2,
-    level: 2,
-    materiId: 'Percabangan Bertingkat',
-    materiEn: 'Nested Branching',
-    goalId: 'Gabungkan dua kondisi: jika bebas maju, jika tidak periksa musuh.',
-    goalEn: 'Combine two conditions: if open move, otherwise check for an enemy.',
-    tipId: 'Percabangan bertingkat = kondisi di dalam kondisi. Letakkan blok '
-        'Jika ke dalam cabang ELSE.',
-    tipEn: 'Nested branching = a condition inside a condition. Place an If '
-        'block into the ELSE branch.',
-    map: <String>[
-      '#####',
-      '#S#.#',
-      '#E..#',
-      '#...#',
-      '#..G#',
-      '#####',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.attack,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.ifOpen,
-      BlockKind.ifEnemy,
-    ],
-    maxBlocks: 18,
-    par: 13,
-    enemyHp: 100,
-    needEnemy: true,
-    needGoal: true,
-  ),
-
-  // ===== WILAYAH 4 — LABIRIN PERULANGAN =====
-  LevelDefinition(
-    region: 3,
-    level: 0,
-    materiId: 'Konsep Perulangan',
-    materiEn: 'The Idea of Loops',
-    goalId: 'Ulangi langkah yang sama sampai sampai tujuan.',
-    goalEn: 'Repeat the same step until you reach the goal.',
-    tipId: 'Alih-alih menulis Maju() lima kali, bungkus dengan Ulangi(n).',
-    tipEn: 'Instead of writing Move() five times, wrap it in Repeat(n).',
-    map: <String>[
-      '######',
-      '#S..G#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.repeat,
-      BlockKind.turnRight,
-    ],
-    maxBlocks: 6,
-    par: 2,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 3,
-    level: 1,
-    materiId: 'For / Perulangan Terhitung',
-    materiEn: 'For / Counted Loops',
-    goalId: 'Tentukan jumlah pengulangan yang tepat untuk mengambil 2 kristal '
-        'dan sampai ke bendera.',
-    goalEn: 'Pick the exact repeat count to grab 2 crystals and reach the flag.',
-    tipId: 'Perulangan terhitung berhenti sendiri setelah jumlahnya terpenuhi.',
-    tipEn: 'A counted loop stops by itself once the count is met.',
-    map: <String>[
-      '########',
-      '#S*.*.G#',
-      '########',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.collect,
-      BlockKind.repeat,
-      BlockKind.turnRight,
-    ],
-    maxBlocks: 10,
-    par: 5,
-    needGoal: true,
-    needCrystals: true,
-  ),
-  LevelDefinition(
-    region: 3,
-    level: 2,
-    materiId: 'While / Perulangan Berdasarkan Kondisi',
-    materiEn: 'While / Condition Loops',
-    goalId: 'Berjalan selama depan masih kosong, lalu temukan jalan ke bendera.',
-    goalEn: 'Keep walking while the front is open, then find the way to the flag.',
-    tipId: 'While berhenti saat kondisi menjadi salah — di sini saat depan '
-        'menjemput tembok.',
-    tipEn: 'While stops when the condition turns false — here when a wall is ahead.',
-    map: <String>[
-      '#########',
-      '#S....#.#',
-      '#......##',
-      '###.#####',
-      '#..G....#',
-      '#########',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.whileOpen,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.repeat,
-    ],
-    maxBlocks: 14,
-    par: 10,
-    needGoal: true,
-  ),
-
-  // ===== WILAYAH 5 — BENTENG LOGIKA =====
-  LevelDefinition(
-    region: 4,
-    level: 0,
-    materiId: 'Kombinasi Algoritma + Variabel',
-    materiEn: 'Algorithms + Variables',
-    goalId: 'Kumpulkan nilai ≥ 2 dari dua kristal sambil menuju bendera.',
-    goalEn: 'Gather nilai >= 2 from two crystals while heading to the flag.',
-    tipId: 'Rencanakan dulu: berapa langkah, di mana ambil kristal, kapan '
-        'belok.',
-    tipEn: 'Plan first: how many steps, where to collect, when to turn.',
-    map: <String>[
-      '######',
-      '#S*..#',
-      '#.#*.#',
-      '#....#',
-      '#...G#',
-      '######',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.collect,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.addValue,
-    ],
-    maxBlocks: 15,
-    par: 10,
-    targetValue: 2,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 4,
-    level: 1,
-    materiId: 'Kombinasi Percabangan + Perulangan',
-    materiEn: 'Branching + Loops',
-    goalId: 'Mendekati musuh dengan perulangan, lalu serang dengan kondisi, '
-        'kemudian capai bendera.',
-    goalEn: 'Approach with a loop, attack with a condition, then reach the flag.',
-    tipId: 'Ulangi untuk mengulang aksi serupa, Jika untuk memutuskan aksi '
-        'tepat.',
-    tipEn: 'Repeat re-runs similar actions, If picks the right action.',
-    map: <String>[
-      '########',
-      '#S..E.G#',
-      '###..###',
-      '########',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.attack,
-      BlockKind.repeat,
-      BlockKind.ifEnemy,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-    ],
-    maxBlocks: 12,
-    par: 8,
-    enemyHp: 100,
-    needEnemy: true,
-    needGoal: true,
-  ),
-  LevelDefinition(
-    region: 4,
-    level: 2,
-    materiId: 'Final Challenge: Logika Pemrograman',
-    materiEn: 'Final Challenge: Programming Logic',
-    goalId: 'Kalahkan boss, kumpulkan nilai ≥ 2, lalu capai bendera.',
-    goalEn: 'Defeat the boss, gather nilai >= 2, then reach the flag.',
-    tipId: 'Gunakan semua yang sudah dipelajari: urutan, variabel, kondisi, '
-        'dan perulangan.',
-    tipEn: 'Use everything you learned: sequence, variables, conditions and loops.',
-    map: <String>[
-      '#########',
-      '#S*.E.*G#',
-      '###.#.###',
-      '#.......#',
-      '#########',
-    ],
-    palette: <BlockKind>[
-      BlockKind.forward,
-      BlockKind.backward,
-      BlockKind.turnRight,
-      BlockKind.turnLeft,
-      BlockKind.attack,
-      BlockKind.collect,
-      BlockKind.addValue,
-      BlockKind.repeat,
-      BlockKind.ifEnemy,
-      BlockKind.ifValue,
-    ],
-    maxBlocks: 18,
-    par: 12,
-    enemyHp: 100,
-    targetValue: 2,
-    needGoal: true,
-    needEnemy: true,
-  ),
-];
-
 // ------------------------------------------------------------
-// HASIL SATU LANGKAH EKSEKUSI
+// KATALOG 15 LEVEL
 // ------------------------------------------------------------
-class GameStep {
-  final BlockKind kind;
-  final String message;
-  final bool ok;
-  final bool attacked; // pemain menghantam musuh
-  final bool hitPlayer; // musuh membalas
-  final bool moved;
+class MazeCatalog {
+  MazeCatalog._();
 
-  const GameStep({
-    required this.kind,
-    required this.message,
-    required this.ok,
-    this.attacked = false,
-    this.hitPlayer = false,
-    this.moved = false,
-  });
+  static const int regionCount = 5;
+  static const int levelsPerRegion = 3;
+
+  /// Ukuran labirin tiap wilayah/level (selalu ganjil).
+  static const List<List<int>> _sizes = <List<int>>[
+    <int>[7, 7, 7],
+    <int>[7, 9, 9],
+    <int>[9, 9, 9],
+    <int>[9, 11, 11],
+    <int>[11, 11, 11],
+  ];
+
+  /// HP monster tiap wilayah/level.
+  static const List<List<int>> _hp = <List<int>>[
+    <int>[1, 1, 2],
+    <int>[2, 2, 2],
+    <int>[2, 3, 3],
+    <int>[3, 3, 3],
+    <int>[3, 3, 4],
+  ];
+
+  static const List<String> _monsterId = <String>[
+    'Goblin Algoritma',
+    'Slime Variabel',
+    'Naga Percabangan',
+    'Iblis Perulangan',
+    'Behemoth Logika',
+  ];
+
+  static const List<String> _monsterEn = <String>[
+    'Algorithm Goblin',
+    'Variable Slime',
+    'Branch Dragon',
+    'Loop Demon',
+    'Logic Behemoth',
+  ];
+
+  static final List<MazeLevel> levels = List<MazeLevel>.generate(
+    regionCount * levelsPerRegion,
+    (int i) => _build(i ~/ levelsPerRegion, i % levelsPerRegion),
+  );
+
+  static MazeLevel level(int region, int level) {
+    final int r = region.clamp(0, regionCount - 1);
+    final int l = level.clamp(0, levelsPerRegion - 1);
+    return levels[r * levelsPerRegion + l];
+  }
+
+  static MazeLevel _build(int region, int level) {
+    final int size = _sizes[region][level];
+    final int hp = _hp[region][level];
+    final Random rng = Random(1000 + region * 37 + level * 7);
+
+    final List<List<bool>> walls = _generateMaze(size, rng);
+    const Pos start = Pos(1, 1);
+    final Pos monster = Pos(size - 2, size - 2);
+    final int startDir = _pickDir(walls, size, start, monster, rng);
+
+    final _Solution sol = _solve(walls, size, start, startDir, monster, hp);
+    final bool boss = level == levelsPerRegion - 1;
+    final String nameId =
+        boss ? '${_monsterId[region]} (Boss)' : _monsterId[region];
+    final String nameEn =
+        boss ? '${_monsterEn[region]} (Boss)' : _monsterEn[region];
+
+    return MazeLevel(
+      region: region,
+      level: level,
+      size: size,
+      walls: walls,
+      start: start,
+      startDir: startDir,
+      monster: monster,
+      enemyHp: hp,
+      par: sol.cost,
+      maxBlocks: _mergedRuns(sol.commands) + 3,
+      solution: sol.commands,
+      monsterId: nameId,
+      monsterEn: nameEn,
+    );
+  }
+
+  /// Labirin sempurna (recursive backtracker).
+  static List<List<bool>> _generateMaze(int size, Random rng) {
+    final List<List<bool>> grid = List<List<bool>>.generate(
+      size,
+      (_) => List<bool>.filled(size, true),
+    );
+    final List<Pos> stack = <Pos>[const Pos(1, 1)];
+    grid[1][1] = false;
+
+    while (stack.isNotEmpty) {
+      final Pos cur = stack.last;
+      final List<int> dirs = <int>[0, 1, 2, 3]..shuffle(rng);
+      var moved = false;
+      for (final int d in dirs) {
+        final int nr = cur.row + _dr[d] * 2;
+        final int nc = cur.col + _dc[d] * 2;
+        if (nr <= 0 || nc <= 0 || nr >= size - 1 || nc >= size - 1) continue;
+        if (!grid[nr][nc]) continue;
+        grid[cur.row + _dr[d]][cur.col + _dc[d]] = false;
+        grid[nr][nc] = false;
+        stack.add(Pos(nr, nc));
+        moved = true;
+        break;
+      }
+      if (!moved) stack.removeLast();
+    }
+    return grid;
+  }
+
+  static int _pickDir(
+    List<List<bool>> walls,
+    int size,
+    Pos start,
+    Pos monster,
+    Random rng,
+  ) {
+    final List<int> options = <int>[];
+    for (var d = 0; d < 4; d++) {
+      final int nr = start.row + _dr[d];
+      final int nc = start.col + _dc[d];
+      if (nr < 0 || nc < 0 || nr >= size || nc >= size) continue;
+      if (walls[nr][nc]) continue;
+      if (nr == monster.row && nc == monster.col) continue;
+      options.add(d);
+    }
+    if (options.isEmpty) return 1;
+    return options[rng.nextInt(options.length)];
+  }
+
+  /// BFS pada keadaan (baris, kolom, arah) untuk mencari rute
+  /// paling efisien sampai berhadapan dengan monster.
+  static _Solution _solve(
+    List<List<bool>> walls,
+    int size,
+    Pos start,
+    int startDir,
+    Pos monster,
+    int hp,
+  ) {
+    int key(int r, int c, int d) => (r * size + c) * 4 + d;
+    final int startKey = key(start.row, start.col, startDir);
+
+    final Map<int, int> dist = <int, int>{startKey: 0};
+    final Map<int, int> parent = <int, int>{};
+    final Map<int, GameCommand> stepCmd = <int, GameCommand>{};
+    final List<int> queue = <int>[startKey];
+
+    int? goalKey;
+    var head = 0;
+    while (head < queue.length) {
+      final int k = queue[head++];
+      final int d = dist[k]!;
+      final int pos = k ~/ 4;
+      final int r = pos ~/ size;
+      final int c = pos % size;
+      final int dir = k % 4;
+
+      if (r + _dr[dir] == monster.row && c + _dc[dir] == monster.col) {
+        goalKey = k;
+        break;
+      }
+
+      // Belok kanan / kiri
+      final int rightDir = (dir + 1) % 4;
+      final int leftDir = (dir + 3) % 4;
+      for (final int nd in <int>[rightDir, leftDir]) {
+        final int nk = key(r, c, nd);
+        if (dist.containsKey(nk)) continue;
+        dist[nk] = d + 1;
+        parent[nk] = k;
+        stepCmd[nk] = nd == rightDir
+            ? GameCommand.turnRight
+            : GameCommand.turnLeft;
+        queue.add(nk);
+      }
+
+      // Maju
+      final int nr = r + _dr[dir];
+      final int nc = c + _dc[dir];
+      if (nr >= 0 && nc >= 0 && nr < size && nc < size) {
+        if (!walls[nr][nc] && !(nr == monster.row && nc == monster.col)) {
+          final int nk = key(nr, nc, dir);
+          if (!dist.containsKey(nk)) {
+            dist[nk] = d + 1;
+            parent[nk] = k;
+            stepCmd[nk] = GameCommand.forward;
+            queue.add(nk);
+          }
+        }
+      }
+    }
+
+    if (goalKey == null) {
+      return const _Solution(<GameCommand>[], 0);
+    }
+
+    final List<GameCommand> path = <GameCommand>[];
+    var cur = goalKey;
+    while (cur != startKey) {
+      path.add(stepCmd[cur]!);
+      cur = parent[cur]!;
+    }
+    final List<GameCommand> commands = path.reversed.toList();
+    return _Solution(commands, commands.length + hp);
+  }
+
+  static int _mergedRuns(List<GameCommand> commands) {
+    var runs = 0;
+    GameCommand? prev;
+    for (final GameCommand c in commands) {
+      if (c != prev) {
+        runs++;
+        prev = c;
+      }
+    }
+    return runs;
+  }
+}
+
+class _Solution {
+  final List<GameCommand> commands;
+  final int cost;
+
+  const _Solution(this.commands, this.cost);
 }
 
 // ------------------------------------------------------------
 // MESIN EKSEKUSI
 // ------------------------------------------------------------
-class _Frame {
-  _Frame(this.blocks, {this.limit, this.whileCond});
+enum StepOutcome { moved, turned, hit, missed, blocked }
 
-  final List<ScriptBlock> blocks;
-  final int? limit;
-  final bool Function(GameEngine engine)? whileCond;
-  int i = 0;
-  int iteration = 1;
-}
+class MazeEngine {
+  final MazeLevel level;
 
-class GameEngine {
-  GameEngine(this.level);
+  int row;
+  int col;
+  int dir;
+  int enemyHp;
+  int steps;
+  StepOutcome? last;
 
-  final LevelDefinition level;
+  MazeEngine(this.level)
+      : row = level.start.row,
+        col = level.start.col,
+        dir = level.startDir,
+        enemyHp = level.enemyHp,
+        steps = 0;
 
-  // --- papan ---
-  late int cols;
-  late int rows;
-  late List<List<bool>> wall;
-  late List<List<bool>> goal;
-  final Set<int> crystals = <int>{};
-  late int startX;
-  late int startY;
-  late Direction startDir;
+  bool get defeated => enemyHp <= 0;
 
-  // --- status ---
-  int px = 0;
-  int py = 0;
-  Direction dir = Direction.right;
-  int playerHp = 100;
-  int enemyHp = 0;
-  int enemyX = -1;
-  int enemyY = -1;
-  bool enemyAlive = false;
-  int nilai = 0;
-  int steps = 0;
-  int crystalsTaken = 0;
-  int crystalsTotal = 0;
+  bool get facingMonster {
+    final int nr = row + _dr[dir];
+    final int nc = col + _dc[dir];
+    return nr == level.monster.row && nc == level.monster.col;
+  }
 
-  bool finished = false;
-  bool won = false;
-  bool lost = false;
-  String resultNote = '';
+  bool get canMove {
+    final int nr = row + _dr[dir];
+    final int nc = col + _dc[dir];
+    if (level.isWall(nr, nc)) return false;
+    if (level.isMonster(nr, nc)) return false;
+    return true;
+  }
 
-  final List<String> log = <String>[];
-  final List<_Frame> _stack = <_Frame>[];
-
-  static const int maxSteps = 250;
-  static const int maxDepth = 60;
-  static const int damage = 34;
-  static const int enemyDamage = 10;
-
-  // ----------------------------------------------------------
-  // BACA PETA
-  // ----------------------------------------------------------
-  void _loadBoard() {
-    rows = level.map.length;
-    cols = level.map.first.length;
-    wall = List<List<bool>>.generate(
-      rows,
-      (int y) => List<bool>.filled(cols, false),
-    );
-    goal = List<List<bool>>.generate(
-      rows,
-      (int y) => List<bool>.filled(cols, false),
-    );
-    crystals.clear();
-    startX = 1;
-    startY = 1;
-    startDir = Direction.right;
-    enemyX = -1;
-    enemyY = -1;
-    enemyAlive = false;
-    crystalsTaken = 0;
-    crystalsTotal = 0;
-
-    for (int y = 0; y < rows; y++) {
-      final String row = level.map[y];
-      for (int x = 0; x < cols; x++) {
-        final String c = x < row.length ? row[x] : '#';
-        if (c == '#') {
-          wall[y][x] = true;
-        } else if (c == 'G') {
-          goal[y][x] = true;
-        } else if (c == '*') {
-          crystals.add(y * cols + x);
-        } else if (c == 'E') {
-          enemyX = x;
-          enemyY = y;
-          enemyAlive = true;
-        } else if (c == 'S' || c == '^' || c == '>' || c == 'v' || c == '<') {
-          startX = x;
-          startY = y;
-          if (c == '^') startDir = Direction.up;
-          if (c == '>') startDir = Direction.right;
-          if (c == 'v') startDir = Direction.down;
-          if (c == '<') startDir = Direction.left;
-        }
-      }
-    }
-    crystalsTotal = crystals.length;
+  void reset() {
+    row = level.start.row;
+    col = level.start.col;
+    dir = level.startDir;
     enemyHp = level.enemyHp;
-  }
-
-  // ----------------------------------------------------------
-  // MULAI EKSEKUSI
-  // ----------------------------------------------------------
-  void start(List<ScriptBlock> script) {
-    _loadBoard();
-    px = startX;
-    py = startY;
-    dir = startDir;
-    playerHp = 100;
-    nilai = 0;
     steps = 0;
-    finished = false;
-    won = false;
-    lost = false;
-    resultNote = '';
-    log
-      ..clear()
-      ..add('> Eksekusi dimulai...');
-    _stack
-      ..clear()
-      ..add(_Frame(script));
+    last = null;
   }
 
-  // ----------------------------------------------------------
-  // PENGECEKAN TUJUAN
-  // ----------------------------------------------------------
-  bool get onGoal => goal[py][px];
-
-  bool get goalOk => !level.needGoal || onGoal;
-
-  bool get enemyOk => !level.needEnemy || !enemyAlive;
-
-  bool get valueOk =>
-      level.targetValue <= 0 || nilai >= level.targetValue;
-
-  bool get crystalOk =>
-      !level.needCrystals || crystalsTaken == crystalsTotal;
-
-  bool get allOk => goalOk && enemyOk && valueOk && crystalOk;
-
-  // ----------------------------------------------------------
-  // INFORMASI UNTUK UI
-  // ----------------------------------------------------------
-  bool get hasEnemy => enemyX >= 0 && level.enemyHp > 0;
-
-  int get crystalsLeft => crystalsTotal - crystalsTaken;
-
-  void _say(String msg) {
-    log.add(msg);
-    if (log.length > 60) log.removeAt(0);
-  }
-
-  void _win(String msg) {
-    won = true;
-    finished = true;
-    resultNote = msg;
-    _say('✔ $msg');
-  }
-
-  void _fail(String msg) {
-    lost = true;
-    finished = true;
-    resultNote = msg;
-    _say('✘ $msg');
-  }
-
-  // ----------------------------------------------------------
-  // BANTU KONDISI
-  // ----------------------------------------------------------
-  (int, int) _aheadCell() {
-    final (int dx, int dy) = dir.vector;
-    return (px + dx, py + dy);
-  }
-
-  bool _inBounds(int x, int y) => x >= 0 && y >= 0 && x < cols && y < rows;
-
-  bool _isWall(int x, int y) => !_inBounds(x, y) || wall[y][x];
-
-  bool _enemyAt(int x, int y) => enemyAlive && enemyX == x && enemyY == y;
-
-  bool get aheadOpen {
-    final (int x, int y) = _aheadCell();
-    return !_isWall(x, y) && !_enemyAt(x, y);
-  }
-
-  bool get enemyAhead {
-    final (int x, int y) = _aheadCell();
-    return enemyAlive && enemyX == x && enemyY == y;
-  }
-
-  // ----------------------------------------------------------
-  // LANGKAH BERIKUTNYA
-  // ----------------------------------------------------------
-  GameStep? nextStep() {
-    if (finished) return null;
-
-    if (steps >= maxSteps) {
-      _fail('Melebihi batas $maxSteps langkah.');
-      return null;
+  StepOutcome apply(GameCommand command) {
+    if (defeated) {
+      return last ?? StepOutcome.blocked;
     }
 
-    while (_stack.isNotEmpty) {
-      final _Frame f = _stack.last;
-
-      if (f.i >= f.blocks.length) {
-        // Perulangan terhitung: ulang lagi bila masih ada sisa.
-        if (f.limit != null && f.iteration < f.limit!) {
-          f.i = 0;
-          f.iteration++;
-          continue;
+    switch (command) {
+      case GameCommand.turnRight:
+        dir = (dir + 1) % 4;
+        steps++;
+        last = StepOutcome.turned;
+        break;
+      case GameCommand.turnLeft:
+        dir = (dir + 3) % 4;
+        steps++;
+        last = StepOutcome.turned;
+        break;
+      case GameCommand.forward:
+        steps++;
+        if (canMove) {
+          row += _dr[dir];
+          col += _dc[dir];
+          last = StepOutcome.moved;
+        } else {
+          last = StepOutcome.blocked;
         }
-        // Perulangan berbasis kondisi: cek ulang kondisinya.
-        if (f.whileCond != null) {
-          if (f.whileCond!(this)) {
-            f.i = 0;
-            continue;
-          }
+        break;
+      case GameCommand.attack:
+        steps++;
+        if (facingMonster) {
+          enemyHp = (enemyHp - 1).clamp(0, level.enemyHp);
+          last = StepOutcome.hit;
+        } else {
+          last = StepOutcome.missed;
         }
-        _stack.removeLast();
-        continue;
-      }
-
-      final ScriptBlock b = f.blocks[f.i];
-      f.i++;
-
-      if (b.kind == BlockKind.repeat) {
-        if (b.count > 0 && b.children.isNotEmpty) {
-          _push(_Frame(b.children, limit: b.count));
-        }
-        continue;
-      }
-      if (b.kind == BlockKind.whileOpen) {
-        if (aheadOpen && b.children.isNotEmpty) {
-          _push(
-            _Frame(b.children, whileCond: (GameEngine e) => e.aheadOpen),
-          );
-        }
-        continue;
-      }
-      if (b.kind == BlockKind.ifOpen) {
-        _pushBranch(aheadOpen ? b.children : b.elseChildren);
-        continue;
-      }
-      if (b.kind == BlockKind.ifEnemy) {
-        _pushBranch(enemyAhead ? b.children : b.elseChildren);
-        continue;
-      }
-      if (b.kind == BlockKind.ifValue) {
-        _pushBranch(
-          b.cmp.test(nilai, b.operand) ? b.children : b.elseChildren,
-        );
-        continue;
-      }
-
-      return _execute(b);
-    }
-
-    // Susunan habis dieksekusi.
-    if (allOk) {
-      _win('Tujuan tercapai!');
-    } else {
-      _fail('Logika selesai, tetapi tujuan belum tercapai.');
-    }
-    return null;
-  }
-
-  void _push(_Frame f) {
-    if (_stack.length >= maxDepth) {
-      _fail('Perulangan terlalu dalam.');
-      return;
-    }
-    _stack.add(f);
-  }
-
-  void _pushBranch(List<ScriptBlock> branch) {
-    if (branch.isNotEmpty) _push(_Frame(branch));
-  }
-
-  // ----------------------------------------------------------
-  // EKSEKUSI SATU BLOK DAUN
-  // ----------------------------------------------------------
-  GameStep _execute(ScriptBlock b) {
-    steps++;
-
-    GameStep step;
-    switch (b.kind) {
-      case BlockKind.forward:
-        step = _move(b, 1);
         break;
-      case BlockKind.backward:
-        step = _move(b, -1);
-        break;
-      case BlockKind.turnRight:
-        dir = dir.turnRight;
-        step = GameStep(
-          kind: b.kind,
-          message: 'Putar kanan → ${dir.nameId(false)}',
-          ok: true,
-        );
-        break;
-      case BlockKind.turnLeft:
-        dir = dir.turnLeft;
-        step = GameStep(
-          kind: b.kind,
-          message: 'Putar kiri → ${dir.nameId(false)}',
-          ok: true,
-        );
-        break;
-      case BlockKind.attack:
-        step = _attack(b);
-        break;
-      case BlockKind.collect:
-        step = _collect(b);
-        break;
-      case BlockKind.addValue:
-        nilai = b.op.apply(nilai, b.operand);
-        step = GameStep(
-          kind: b.kind,
-          message: 'nilai = nilai ${b.op.symbol} ${b.operand} → $nilai',
-          ok: true,
-        );
-        break;
-      default:
-        step = GameStep(
-          kind: b.kind,
-          message: 'Blok tidak dikenal',
-          ok: false,
-        );
     }
-
-    _say(step.message);
-
-    // Musuh sudah tumbang → cek kemenangan sebelum balasan.
-    if (allOk) {
-      _win('Tujuan tercapai!');
-      return step;
-    }
-
-    if (playerHp <= 0) {
-      _fail('Karakter kehabisan HP.');
-      return step;
-    }
-
-    // Balasan serangan musuh bila bersebelahan.
-    if (enemyAlive &&
-        (enemyX - px).abs() + (enemyY - py).abs() == 1 &&
-        !goal[py][px]) {
-      playerHp -= enemyDamage;
-      if (playerHp < 0) playerHp = 0;
-      _say('⚔ Musuh menyerang! -$enemyDamage HP');
-      if (playerHp <= 0) {
-        _fail('Karakter kehabisan HP.');
-      }
-    }
-
-    return step;
-  }
-
-  GameStep _move(ScriptBlock b, int sign) {
-    final (int dx, int dy) = dir.vector;
-    final int nx = px + dx * sign;
-    final int ny = py + dy * sign;
-
-    if (_isWall(nx, ny)) {
-      return GameStep(
-        kind: b.kind,
-        message: 'Terhalang dinding — maju dibatalkan.',
-        ok: false,
-      );
-    }
-    if (_enemyAt(nx, ny)) {
-      return GameStep(
-        kind: b.kind,
-        message: 'Musuh menghalangi jalan.',
-        ok: false,
-      );
-    }
-
-    px = nx;
-    py = ny;
-    return GameStep(
-      kind: b.kind,
-      message: 'Langkah ke (${px + 1}, ${py + 1}) arah ${dir.nameId(false)}',
-      ok: true,
-      moved: true,
-    );
-  }
-
-  GameStep _attack(ScriptBlock b) {
-    if (enemyAhead) {
-      enemyHp -= damage;
-      if (enemyHp <= 0) {
-        enemyHp = 0;
-        enemyAlive = false;
-        return GameStep(
-          kind: b.kind,
-          message: 'Serangan tepat! Musuh dikalahkan. 💥',
-          ok: true,
-          attacked: true,
-        );
-      }
-      return GameStep(
-        kind: b.kind,
-        message: 'Serangan mengenai! -$damage HP musuh (sisa $enemyHp)',
-        ok: true,
-        attacked: true,
-      );
-    }
-    return GameStep(
-      kind: b.kind,
-      message: 'Tidak ada musuh di depan.',
-      ok: false,
-    );
-  }
-
-  GameStep _collect(ScriptBlock b) {
-    final int key = py * cols + px;
-    if (crystals.remove(key)) {
-      crystalsTaken++;
-      nilai += level.crystalValue;
-      return GameStep(
-        kind: b.kind,
-        message: 'Kristal diambil → nilai = $nilai',
-        ok: true,
-      );
-    }
-    return GameStep(
-      kind: b.kind,
-      message: 'Tidak ada kristal di titik ini.',
-      ok: false,
-    );
+    return last!;
   }
 }

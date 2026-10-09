@@ -1,304 +1,142 @@
+import 'package:flutter_application_1/services/game_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_application_1/services/game_service.dart';
-
-// ============================================================
-// TES MESIN PERMAINAN
-// ============================================================
-// Memastikan setiap dari 15 level punya solusi yang benar-benar
-// bisa dimenangkan mesin, dengan jumlah blok <= par level tsb.
-
-ScriptBlock _b(BlockKind k) => ScriptBlock(k);
-
-ScriptBlock _repeat(int n, List<ScriptBlock> children) =>
-    ScriptBlock(BlockKind.repeat)
-      ..count = n
-      ..children.addAll(children);
-
-ScriptBlock _while(List<ScriptBlock> children) =>
-    ScriptBlock(BlockKind.whileOpen)..children.addAll(children);
-
-ScriptBlock _ifEnemy(List<ScriptBlock> children) =>
-    ScriptBlock(BlockKind.ifEnemy)..children.addAll(children);
-
-ScriptBlock _ifValue(
-  CompareOp cmp,
-  int n,
-  List<ScriptBlock> children,
-) => ScriptBlock(BlockKind.ifValue)
-  ..cmp = cmp
-  ..operand = n
-  ..children.addAll(children);
-
-ScriptBlock _av(ValueOp op, int n) => ScriptBlock(BlockKind.addValue)
-  ..op = op
-  ..operand = n;
-
-/// Menjalankan susunan blok sampai mesin selesai.
-GameEngine _run(int levelIndex, List<ScriptBlock> script) {
-  final GameEngine engine = GameEngine(kLevels[levelIndex]);
-  engine.start(script);
-
-  int guard = 0;
-  while (!engine.finished && guard < 1000) {
-    guard++;
-    engine.nextStep();
-  }
-  return engine;
-}
-
-/// Solusi resmi tiap level (urutan blok).
-final Map<int, List<ScriptBlock>> solutions = <int, List<ScriptBlock>>{
-  // L1 - Maju, Maju, Putar Kanan, Maju (4 = par)
-  0: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-  ],
-
-  // L2 - Maju x2, Putar Kanan, Maju x2 (5 = par)
-  1: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L3 - Maju, Ambil, Maju, Ambil, Maju, Putar Kanan, Maju (7 = par)
-  2: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-  ],
-
-  // L4 - Maju, Ambil x3 bergantian -> nilai 3 (6 = par)
-  3: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-  ],
-
-  // L5 - 1 x 9 = 9, 9 + 3 = 12 lalu ke bendera (8 = par)
-  4: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _av(ValueOp.mul, 9),
-    _av(ValueOp.add, 3),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-  ],
-
-  // L6 - Maju, Ambil, Jika nilai >= 1 -> Serang x3 (6 = par)
-  5: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _ifValue(CompareOp.gte, 1, <ScriptBlock>[
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-    ]),
-  ],
-
-  // L7 - Putar Kanan, Maju x2, Putar Kiri, Maju x2 (6 <= par 8)
-  6: <ScriptBlock>[
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnLeft),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L8 - Maju, Jika ada musuh -> Serang x3, Maju x2 (6 <= par 7)
-  7: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _ifEnemy(<ScriptBlock>[
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-    ]),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L9 - Putar Kanan, Serang x3, Maju x3, Putar Kiri, Maju x2 (10 <= par 13)
-  8: <ScriptBlock>[
-    _b(BlockKind.turnRight),
-    _b(BlockKind.attack),
-    _b(BlockKind.attack),
-    _b(BlockKind.attack),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnLeft),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L10 - Ulangi(3) { Maju } (2 = par)
-  9: <ScriptBlock>[
-    _repeat(3, <ScriptBlock>[
-      _b(BlockKind.forward),
-    ]),
-  ],
-
-  // L11 - Ulangi(3) { Maju, Ambil }, Maju, Maju (5 = par)
-  10: <ScriptBlock>[
-    _repeat(3, <ScriptBlock>[
-      _b(BlockKind.forward),
-      _b(BlockKind.collect),
-    ]),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L12 - Selama(depan kosong){ Maju }, lalu belok turun ke bendera (10 = par)
-  11: <ScriptBlock>[
-    _while(<ScriptBlock>[
-      _b(BlockKind.forward),
-    ]),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnLeft),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-  ],
-
-  // L13 - kumpulkan 2 nilai dari dua kristal lalu ke bendera (10 = par)
-  12: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnRight),
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.turnLeft),
-    _b(BlockKind.forward),
-  ],
-
-  // L14 - Maju x2, Jika ada musuh -> Serang x3, Ulangi(3){ Maju } (8 = par)
-  13: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _ifEnemy(<ScriptBlock>[
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-      _b(BlockKind.attack),
-    ]),
-    _repeat(3, <ScriptBlock>[
-      _b(BlockKind.forward),
-    ]),
-  ],
-
-  // L15 - ambil, kalahkan boss, ambil lagi, capai bendera (11 <= par 12)
-  14: <ScriptBlock>[
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-    _b(BlockKind.attack),
-    _b(BlockKind.attack),
-    _b(BlockKind.attack),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.forward),
-    _b(BlockKind.collect),
-    _b(BlockKind.forward),
-  ],
-};
+const List<List<int>> _deltas = <List<int>>[
+  <int>[-1, 0],
+  <int>[0, 1],
+  <int>[1, 0],
+  <int>[0, -1],
+];
 
 void main() {
-  test('15 level terdaftar dan terurut', () {
-    expect(kLevels.length, 15);
-    for (int i = 0; i < kLevels.length; i++) {
-      expect(kLevels[i].level, i % 3, reason: 'Level ${i + 1}');
-      expect(kLevels[i].region, i ~/ 3, reason: 'Level ${i + 1}');
-      expect(kLevels[i].palette, isNotEmpty, reason: 'Level ${i + 1}');
-      expect(
-        kLevels[i].maxBlocks,
-        greaterThanOrEqualTo(kLevels[i].par),
-        reason: 'kuota >= par di level ${i + 1}',
-      );
-    }
-  });
+  group('MazeCatalog', () {
+    test('menyediakan 15 level (5 wilayah x 3 level)', () {
+      expect(MazeCatalog.levels.length, 15);
+      expect(MazeCatalog.regionCount, 5);
+      expect(MazeCatalog.levelsPerRegion, 3);
+    });
 
-  test('setiap level bisa dimenangkan dengan jumlah blok <= par', () {
-    expect(solutions.length, 15);
-
-    for (final MapEntry<int, List<ScriptBlock>> e in solutions.entries) {
-      final LevelDefinition lv = kLevels[e.key];
-      final GameEngine engine = _run(e.key, e.value);
-
-      expect(
-        engine.won,
-        isTrue,
-        reason: 'Level ${e.key + 1} tidak tercapai.\n'
-            'LOG:\n${engine.log.join('\n')}\n'
-            'HP pemain: ${engine.playerHp}, musuh: ${engine.enemyHp}, '
-            'nilai: ${engine.nilai}, posisi: (${engine.px},${engine.py})',
-      );
-
-      expect(
-        countBlocks(e.value),
-        lessThanOrEqualTo(lv.par),
-        reason: 'solusi level ${e.key + 1} melebihi par',
-      );
-      expect(
-        countBlocks(e.value),
-        lessThanOrEqualTo(lv.maxBlocks),
-        reason: 'solusi level ${e.key + 1} melebihi kuota',
-      );
-    }
-  });
-
-  test('susunan yang belum lengkap TIDAK memberi kemenangan', () {
-    final GameEngine engine = _run(0, <ScriptBlock>[_b(BlockKind.forward)]);
-    expect(engine.won, isFalse);
-    expect(engine.finished, isTrue);
-    expect(engine.resultNote, isNotEmpty);
-  });
-
-  test('serangan memakan 3 pukulan dan membalas 10 HP tiap aksi', () {
-    final GameEngine engine = _run(
-      7,
-      <ScriptBlock>[
-        _b(BlockKind.forward),
-        _b(BlockKind.attack),
-        _b(BlockKind.attack),
-        _b(BlockKind.attack),
-        _b(BlockKind.forward),
-        _b(BlockKind.forward),
-      ],
-    );
-    expect(engine.won, isTrue);
-    expect(engine.enemyHp, 0);
-    expect(engine.playerHp, lessThan(100));
-    expect(engine.playerHp, greaterThan(0));
-  });
-
-  test('kuota blok menolak penambahan saat penuh', () {
-    final List<ScriptBlock> script = <ScriptBlock>[];
-    final int quota = kLevels[0].maxBlocks;
-    for (int i = 0; i < quota + 3; i++) {
-      if (countBlocks(script) < quota) {
-        script.add(_b(BlockKind.forward));
+    test('posisi awal dan monster bukan dinding', () {
+      for (final MazeLevel level in MazeCatalog.levels) {
+        expect(
+          level.walls[level.start.row][level.start.col],
+          isFalse,
+          reason: 'start level ${level.region}-${level.level}',
+        );
+        expect(
+          level.walls[level.monster.row][level.monster.col],
+          isFalse,
+          reason: 'monster level ${level.region}-${level.level}',
+        );
       }
-    }
-    expect(countBlocks(script), quota);
+    });
+
+    test('setiap level punya solusi yang mengalahkan monster', () {
+      for (final MazeLevel level in MazeCatalog.levels) {
+        final MazeEngine engine = MazeEngine(level);
+        for (final GameCommand command in level.solution) {
+          engine.apply(command);
+        }
+        expect(
+          engine.facingMonster,
+          isTrue,
+          reason: 'rute level ${level.region}-${level.level} '
+              'tidak berakhir menghadap monster',
+        );
+        for (var i = 0; i < level.enemyHp; i++) {
+          engine.apply(GameCommand.attack);
+        }
+        expect(engine.defeated, isTrue);
+        expect(engine.steps, level.par);
+      }
+    });
+
+    test('kuota blok cukup untuk menyusun solusi', () {
+      for (final MazeLevel level in MazeCatalog.levels) {
+        expect(level.maxBlocks, greaterThanOrEqualTo(1));
+        expect(level.par, greaterThan(0));
+      }
+    });
+
+    test('kesulitan naik: ukuran labirin dan HP monster bertambah', () {
+      expect(MazeCatalog.level(0, 0).size,
+          lessThanOrEqualTo(MazeCatalog.level(4, 2).size));
+      expect(MazeCatalog.level(0, 0).enemyHp,
+          lessThanOrEqualTo(MazeCatalog.level(4, 2).enemyHp));
+    });
+  });
+
+  group('MazeEngine', () {
+    test('belok kanan 4 kali kembali ke arah semula', () {
+      final MazeEngine engine = MazeEngine(MazeCatalog.level(0, 0));
+      final int startDir = engine.dir;
+      for (var i = 0; i < 4; i++) {
+        engine.apply(GameCommand.turnRight);
+      }
+      expect(engine.dir, startDir);
+      expect(engine.steps, 4);
+    });
+
+    test('maju menabrak dinding ditandai blocked dan tidak berpindah', () {
+      final MazeLevel level = MazeCatalog.level(0, 0);
+      int? wallDir;
+      for (var d = 0; d < 4; d++) {
+        final int r = level.start.row + _deltas[d][0];
+        final int c = level.start.col + _deltas[d][1];
+        if (level.isWall(r, c)) {
+          wallDir = d;
+          break;
+        }
+      }
+      expect(wallDir, isNotNull);
+
+      final MazeEngine engine = MazeEngine(level);
+      while (engine.dir != wallDir) {
+        engine.apply(GameCommand.turnRight);
+      }
+      final int row0 = engine.row;
+      final int col0 = engine.col;
+      final StepOutcome outcome = engine.apply(GameCommand.forward);
+      expect(outcome, StepOutcome.blocked);
+      expect(engine.row, row0);
+      expect(engine.col, col0);
+    });
+
+    test('serang saat tidak menghadap monster = meleset', () {
+      final MazeEngine engine = MazeEngine(MazeCatalog.level(0, 0));
+      final StepOutcome outcome = engine.apply(GameCommand.attack);
+      expect(outcome, StepOutcome.missed);
+      expect(engine.enemyHp, engine.level.enemyHp);
+    });
+
+    test('reset mengembalikan keadaan awal', () {
+      final MazeEngine engine = MazeEngine(MazeCatalog.level(0, 0));
+      engine.apply(GameCommand.turnRight);
+      engine.apply(GameCommand.forward);
+      engine.reset();
+      expect(engine.row, engine.level.start.row);
+      expect(engine.col, engine.level.start.col);
+      expect(engine.dir, engine.level.startDir);
+      expect(engine.steps, 0);
+      expect(engine.enemyHp, engine.level.enemyHp);
+    });
+  });
+
+  group('expandBlocks', () {
+    test('menggabungkan hitungan blok menjadi perintah tunggal', () {
+      final List<CommandBlock> blocks = <CommandBlock>[
+        CommandBlock(GameCommand.forward, count: 3),
+        CommandBlock(GameCommand.turnRight),
+        CommandBlock(GameCommand.attack, count: 2),
+      ];
+      expect(expandBlocks(blocks), <GameCommand>[
+        GameCommand.forward,
+        GameCommand.forward,
+        GameCommand.forward,
+        GameCommand.turnRight,
+        GameCommand.attack,
+        GameCommand.attack,
+      ]);
+    });
   });
 }

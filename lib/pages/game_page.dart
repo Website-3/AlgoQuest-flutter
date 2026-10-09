@@ -39,6 +39,9 @@ class GamePage extends StatefulWidget {
   /// Dipanggil setelah pemain menekan "Kembali ke Peta".
   final void Function(int stars)? onFinished;
 
+  /// Khusus pratinjau: memaksa animasi serangan ke posisi tertentu (0..1).
+  final double? debugAttack;
+
   const GamePage({
     super.key,
     required this.region,
@@ -47,25 +50,49 @@ class GamePage extends StatefulWidget {
     required this.onLanguageChanged,
     required this.onBack,
     this.onFinished,
+    this.debugAttack,
   });
 
   @override
   State<GamePage> createState() => _GamePageState();
 }
 
-class _GamePageState extends State<GamePage> {
+class _GamePageState extends State<GamePage>
+    with SingleTickerProviderStateMixin {
   late MazeLevel _level;
   late MazeEngine _engine;
 
   final List<CommandBlock> _blocks = <CommandBlock>[];
   bool _running = false;
 
+  /// Animasi serangan: karakter menerjang + tebasan + angka damage.
+  late final AnimationController _attackCtrl;
+
   bool get _en => widget.isEnglish;
 
   @override
   void initState() {
     super.initState();
+    _attackCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
     _loadLevel();
+
+    // Pratinjau: tempatkan karakter di depan monster dan bekukan
+    // animasi serangan pada satu frame tertentu.
+    if (widget.debugAttack != null) {
+      for (final GameCommand command in _level.solution) {
+        _engine.apply(command);
+      }
+      _attackCtrl.value = widget.debugAttack!.clamp(0.0, 1.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _attackCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -74,6 +101,7 @@ class _GamePageState extends State<GamePage> {
     if (oldWidget.region != widget.region || oldWidget.level != widget.level) {
       setState(() {
         _blocks.clear();
+        _attackCtrl.reset();
         _loadLevel();
       });
     }
@@ -126,6 +154,7 @@ class _GamePageState extends State<GamePage> {
     setState(() {
       _blocks.clear();
       _engine.reset();
+      _attackCtrl.reset();
     });
   }
 
@@ -139,14 +168,24 @@ class _GamePageState extends State<GamePage> {
     setState(() {
       _running = true;
       _engine.reset();
+      _attackCtrl.reset();
     });
 
     final List<GameCommand> commands = expandBlocks(_blocks);
     for (final GameCommand command in commands) {
       if (!mounted) return;
       if (_engine.defeated) break;
-      setState(() => _engine.apply(command));
-      await Future<void>.delayed(const Duration(milliseconds: 240));
+
+      final StepOutcome outcome = _engine.apply(command);
+      setState(() {});
+
+      if (outcome == StepOutcome.hit) {
+        // Animasi menyerang monster.
+        _attackCtrl.forward(from: 0);
+        await Future<void>.delayed(const Duration(milliseconds: 440));
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 240));
+      }
     }
 
     if (!mounted) return;
@@ -381,28 +420,43 @@ class _GamePageState extends State<GamePage> {
               child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints inner) {
                   final double cell = inner.maxWidth / _level.size;
-                  return Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _MazePainter(level: _level),
-                        ),
-                      ),
-                      _token(
-                        key: const ValueKey<String>('monster'),
-                        cell: cell,
-                        row: _level.monster.row,
-                        col: _level.monster.col,
-                        child: _monsterToken(cell * 0.9),
-                      ),
-                      _token(
-                        key: const ValueKey<String>('player'),
-                        cell: cell,
-                        row: _engine.row,
-                        col: _engine.col,
-                        child: _playerToken(cell * 0.76),
-                      ),
-                    ],
+                  return AnimatedBuilder(
+                    animation: _attackCtrl,
+                    builder: (BuildContext context, _) {
+                      final double t = _attackCtrl.value;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: <Widget>[
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _MazePainter(level: _level),
+                            ),
+                          ),
+                          // Efek serangan: tebasan + angka damage.
+                          _attackEffect(cell, t),
+                          _token(
+                            key: const ValueKey<String>('monster'),
+                            cell: cell,
+                            row: _level.monster.row,
+                            col: _level.monster.col,
+                            child: Transform.translate(
+                              offset: _shakeOffset(cell, t),
+                              child: _monsterToken(cell * 0.9, t),
+                            ),
+                          ),
+                          _token(
+                            key: const ValueKey<String>('player'),
+                            cell: cell,
+                            row: _engine.row,
+                            col: _engine.col,
+                            child: Transform.translate(
+                              offset: _lungeOffset(cell, t),
+                              child: _heroToken(cell * 1.02),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -432,48 +486,170 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _playerToken(double size) {
-    return Transform.rotate(
-      angle: _engine.dir * math.pi / 2,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: _kCyan.withValues(alpha: 0.20),
-          shape: BoxShape.circle,
-          border: Border.all(color: _kCyan, width: 2),
-          boxShadow: <BoxShadow>[
-            BoxShadow(color: _kCyan.withValues(alpha: 0.45), blurRadius: 10),
+  // ---- Animasi serangan ----
+
+  /// Karakter menerjang ke arah monster lalu kembali.
+  Offset _lungeOffset(double cell, double t) {
+    double p;
+    if (t <= 0) {
+      p = 0;
+    } else if (t < 0.35) {
+      p = Curves.easeOut.transform(t / 0.35);
+    } else if (t < 0.6) {
+      p = 1;
+    } else {
+      p = (1 - (t - 0.6) / 0.4).clamp(0.0, 1.0);
+    }
+    final double amount = p * cell * 0.42;
+    return Offset(
+      kDirCol[_engine.dir] * amount,
+      kDirRow[_engine.dir] * amount,
+    );
+  }
+
+  /// Monster terguncang saat terkena serangan.
+  Offset _shakeOffset(double cell, double t) {
+    if (t < 0.35 || t > 0.75) return Offset.zero;
+    final double local = (t - 0.35) / 0.4;
+    final double damp = 1 - local;
+    return Offset(math.sin(local * math.pi * 7) * cell * 0.16 * damp, 0);
+  }
+
+  double _hitFlash(double t) {
+    if (t < 0.35 || t > 0.68) return 0;
+    final double local = (t - 0.35) / 0.33;
+    return (1 - (local * 2 - 1).abs()).clamp(0.0, 1.0);
+  }
+
+  double _slashOpacity(double t) {
+    if (t < 0.33 || t > 0.72) return 0;
+    final double local = (t - 0.33) / 0.39;
+    if (local < 0.3) return (local / 0.3).clamp(0.0, 1.0);
+    return (1 - (local - 0.3) / 0.7).clamp(0.0, 1.0);
+  }
+
+  double _damageProgress(double t) {
+    if (t < 0.3) return 0;
+    return ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+  }
+
+  Widget _attackEffect(double cell, double t) {
+    final double slash = _slashOpacity(t);
+    final double dmg = _damageProgress(t);
+    if (slash <= 0 && dmg <= 0) return const SizedBox.shrink();
+
+    final Pos m = _level.monster;
+    return Positioned(
+      left: m.col * cell,
+      top: m.row * cell,
+      width: cell,
+      height: cell,
+      child: IgnorePointer(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            if (slash > 0)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: slash,
+                  child: CustomPaint(painter: _SlashPainter()),
+                ),
+              ),
+            if (dmg > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: -cell * (0.45 + dmg * 1.05),
+                child: Opacity(
+                  opacity: (1 - dmg).clamp(0.0, 1.0),
+                  child: _damageNumber('1'),
+                ),
+              ),
           ],
         ),
-        child: Icon(Icons.navigation, color: _kCyan, size: size * 0.62),
       ),
     );
   }
 
-  Widget _monsterToken(double size) {
+  /// Angka damage dengan garis tepi gelap agar terbaca di mana saja.
+  Widget _damageNumber(String value) {
+    final TextStyle stroke = TextStyle(
+      fontSize: 20,
+      fontWeight: FontWeight.w900,
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..color = const Color(0xFF101414),
+    );
+    const TextStyle fill = TextStyle(
+      fontSize: 20,
+      fontWeight: FontWeight.w900,
+      color: _kYellow,
+    );
+    return Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        Text('-$value', textAlign: TextAlign.center, style: stroke),
+        Text('-$value', textAlign: TextAlign.center, style: fill),
+      ],
+    );
+  }
+
+  /// Karakter pemain (bentuk orang, bukan kursor) + penunjuk arah hadap.
+  Widget _heroToken(double size) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          Positioned.fill(
+            child: Transform.rotate(
+              angle: (_engine.dir - 1) * math.pi / 2,
+              child: CustomPaint(
+                painter: _FacingPainter(color: _kCyan.withValues(alpha: 0.6)),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: size,
+            height: size,
+            child: CustomPaint(painter: _HeroPainter()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monsterToken(double size, double t) {
     final bool dead = _engine.defeated;
+    final double flash = _hitFlash(t);
+    final Color body = Color.lerp(_kRed, Colors.white, flash) ?? _kRed;
     return Opacity(
       opacity: dead ? 0.25 : 1,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: _kRed,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: dead
-              ? null
-              : <BoxShadow>[
-                  BoxShadow(
-                    color: _kPink.withValues(alpha: 0.5),
-                    blurRadius: 12,
-                  ),
-                ],
-        ),
-        child: Icon(
-          dead ? Icons.check_rounded : Icons.pest_control,
-          color: Colors.white,
-          size: size * 0.62,
+      child: Transform.scale(
+        scale: 1 + flash * 0.18,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: body,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: dead
+                ? null
+                : <BoxShadow>[
+                    BoxShadow(
+                      color: (flash > 0 ? Colors.white : _kPink)
+                          .withValues(alpha: flash > 0 ? 0.9 : 0.5),
+                      blurRadius: flash > 0 ? 20 : 12,
+                    ),
+                  ],
+          ),
+          child: Icon(
+            dead ? Icons.check_rounded : Icons.pest_control,
+            color: Colors.white,
+            size: size * 0.62,
+          ),
         ),
       ),
     );
@@ -1043,6 +1219,180 @@ class _GamePageState extends State<GamePage> {
         return Icons.local_fire_department_rounded;
     }
   }
+}
+
+// ============================================================
+// KARAKTER PEMAIN
+// ============================================================
+class _HeroPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+
+    // Bayangan
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(s * 0.5, s * 0.94),
+        width: s * 0.6,
+        height: s * 0.14,
+      ),
+      Paint()..color = Colors.black.withValues(alpha: 0.35),
+    );
+
+    // Kaki
+    final Paint leg = Paint()..color = const Color(0xFF23324C);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.35, s * 0.64, s * 0.12, s * 0.26),
+        Radius.circular(s * 0.05),
+      ),
+      leg,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.53, s * 0.64, s * 0.12, s * 0.26),
+        Radius.circular(s * 0.05),
+      ),
+      leg,
+    );
+
+    // Pedang (di sisi kanan)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34),
+        Radius.circular(s * 0.03),
+      ),
+      Paint()..color = const Color(0xFFDCE6EA),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.72, s * 0.46, s * 0.19, s * 0.05),
+        Radius.circular(s * 0.02),
+      ),
+      Paint()..color = const Color(0xFFC08A2E),
+    );
+
+    // Lengan
+    final Paint arm = Paint()..color = const Color(0xFF2F8FC4);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.17, s * 0.45, s * 0.14, s * 0.24),
+        Radius.circular(s * 0.07),
+      ),
+      arm,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.69, s * 0.45, s * 0.14, s * 0.24),
+        Radius.circular(s * 0.07),
+      ),
+      arm,
+    );
+
+    // Badan
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29),
+        Radius.circular(s * 0.1),
+      ),
+      Paint()..color = const Color(0xFF3FC6F5),
+    );
+    // Sabuk
+    canvas.drawRect(
+      Rect.fromLTWH(s * 0.29, s * 0.635, s * 0.42, s * 0.04),
+      Paint()..color = const Color(0xFF1B6E8C),
+    );
+
+    // Kepala
+    final Offset head = Offset(s * 0.5, s * 0.29);
+    canvas.drawCircle(head, s * 0.19, Paint()..color = const Color(0xFFFFD3A8));
+    // Helm / rambut
+    canvas.drawArc(
+      Rect.fromCircle(center: head, radius: s * 0.19),
+      math.pi * 1.02,
+      math.pi * 0.96,
+      true,
+      Paint()..color = const Color(0xFF22314A),
+    );
+    // Mata
+    final Paint eye = Paint()..color = const Color(0xFF14232E);
+    canvas.drawCircle(Offset(s * 0.435, s * 0.30), s * 0.028, eye);
+    canvas.drawCircle(Offset(s * 0.565, s * 0.30), s * 0.028, eye);
+    // Senyum
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(s * 0.5, s * 0.345), radius: s * 0.06),
+      0.25,
+      math.pi - 0.5,
+      false,
+      Paint()
+        ..color = const Color(0xFF14232E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.022
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeroPainter oldDelegate) => false;
+}
+
+/// Panah penunjuk arah hadap karakter (di atas lantai).
+class _FacingPainter extends CustomPainter {
+  final Color color;
+
+  _FacingPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Path path = Path()
+      ..moveTo(s * 0.24, s * 0.16)
+      ..lineTo(s * 0.84, s * 0.5)
+      ..lineTo(s * 0.24, s * 0.84);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.13
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FacingPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+/// Efek tebasan saat menyerang.
+class _SlashPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double s = size.width;
+    final Path path = Path()
+      ..moveTo(s * 0.12, s * 0.2)
+      ..lineTo(s * 0.88, s * 0.8)
+      ..moveTo(s * 0.3, s * 0.1)
+      ..lineTo(s * 0.96, s * 0.6);
+
+    final Paint glow = Paint()
+      ..color = _kOrange.withValues(alpha: 0.75)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.22
+      ..strokeCap = StrokeCap.round;
+    final Paint core = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.10
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawPath(path, glow);
+    canvas.drawPath(path, core);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SlashPainter oldDelegate) => false;
 }
 
 // ============================================================

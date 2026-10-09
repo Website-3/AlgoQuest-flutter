@@ -13,8 +13,8 @@ import 'dart:math';
 // makin tinggi.
 
 // 0 = atas, 1 = kanan, 2 = bawah, 3 = kiri
-const List<int> _dr = <int>[-1, 0, 1, 0];
-const List<int> _dc = <int>[0, 1, 0, -1];
+const List<int> kDirRow = <int>[-1, 0, 1, 0];
+const List<int> kDirCol = <int>[0, 1, 0, -1];
 
 // ------------------------------------------------------------
 // KOORDINAT
@@ -243,11 +243,11 @@ class MazeCatalog {
       final List<int> dirs = <int>[0, 1, 2, 3]..shuffle(rng);
       var moved = false;
       for (final int d in dirs) {
-        final int nr = cur.row + _dr[d] * 2;
-        final int nc = cur.col + _dc[d] * 2;
+        final int nr = cur.row + kDirRow[d] * 2;
+        final int nc = cur.col + kDirCol[d] * 2;
         if (nr <= 0 || nc <= 0 || nr >= size - 1 || nc >= size - 1) continue;
         if (!grid[nr][nc]) continue;
-        grid[cur.row + _dr[d]][cur.col + _dc[d]] = false;
+        grid[cur.row + kDirRow[d]][cur.col + kDirCol[d]] = false;
         grid[nr][nc] = false;
         stack.add(Pos(nr, nc));
         moved = true;
@@ -267,8 +267,8 @@ class MazeCatalog {
   ) {
     final List<int> options = <int>[];
     for (var d = 0; d < 4; d++) {
-      final int nr = start.row + _dr[d];
-      final int nc = start.col + _dc[d];
+      final int nr = start.row + kDirRow[d];
+      final int nc = start.col + kDirCol[d];
       if (nr < 0 || nc < 0 || nr >= size || nc >= size) continue;
       if (walls[nr][nc]) continue;
       if (nr == monster.row && nc == monster.col) continue;
@@ -306,7 +306,7 @@ class MazeCatalog {
       final int c = pos % size;
       final int dir = k % 4;
 
-      if (r + _dr[dir] == monster.row && c + _dc[dir] == monster.col) {
+      if (r + kDirRow[dir] == monster.row && c + kDirCol[dir] == monster.col) {
         goalKey = k;
         break;
       }
@@ -326,8 +326,8 @@ class MazeCatalog {
       }
 
       // Maju
-      final int nr = r + _dr[dir];
-      final int nc = c + _dc[dir];
+      final int nr = r + kDirRow[dir];
+      final int nc = c + kDirCol[dir];
       if (nr >= 0 && nc >= 0 && nr < size && nc < size) {
         if (!walls[nr][nc] && !(nr == monster.row && nc == monster.col)) {
           final int nk = key(nr, nc, dir);
@@ -400,14 +400,14 @@ class MazeEngine {
   bool get defeated => enemyHp <= 0;
 
   bool get facingMonster {
-    final int nr = row + _dr[dir];
-    final int nc = col + _dc[dir];
+    final int nr = row + kDirRow[dir];
+    final int nc = col + kDirCol[dir];
     return nr == level.monster.row && nc == level.monster.col;
   }
 
   bool get canMove {
-    final int nr = row + _dr[dir];
-    final int nc = col + _dc[dir];
+    final int nr = row + kDirRow[dir];
+    final int nc = col + kDirCol[dir];
     if (level.isWall(nr, nc)) return false;
     if (level.isMonster(nr, nc)) return false;
     return true;
@@ -441,8 +441,8 @@ class MazeEngine {
       case GameCommand.forward:
         steps++;
         if (canMove) {
-          row += _dr[dir];
-          col += _dc[dir];
+          row += kDirRow[dir];
+          col += kDirCol[dir];
           last = StepOutcome.moved;
         } else {
           last = StepOutcome.blocked;

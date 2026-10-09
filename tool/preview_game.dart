@@ -3,6 +3,7 @@
 // Jalankan: flutter run -t tool/preview_game.dart
 // Atau akses web dengan query: ?r=0&l=0  (region 0-4, level 0-2)
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
 
 void main() {
@@ -19,6 +20,27 @@ class PreviewApp extends StatelessWidget {
         int.tryParse(uri.queryParameters['r'] ?? '')?.clamp(0, 4) ?? 0;
     final int level =
         int.tryParse(uri.queryParameters['l'] ?? '')?.clamp(0, 2) ?? 0;
+    final double? fx = double.tryParse(uri.queryParameters['fx'] ?? '');
+    final String mode = uri.queryParameters['mode'] ?? 'logic';
+
+    final Widget page = mode == 'adventure'
+        ? AdventurePage(
+            region: region,
+            level: level,
+            isEnglish: false,
+            onLanguageChanged: () {},
+            onBack: () {},
+            onFinished: (_) {},
+          )
+        : GamePage(
+            region: region,
+            level: level,
+            isEnglish: false,
+            onLanguageChanged: () {},
+            onBack: () {},
+            onFinished: (_) {},
+            debugAttack: fx,
+          );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -35,14 +57,7 @@ class PreviewApp extends StatelessWidget {
               height: 844,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(18),
-                child: GamePage(
-                  region: region,
-                  level: level,
-                  isEnglish: false,
-                  onLanguageChanged: () {},
-                  onBack: () {},
-                  onFinished: (_) {},
-                ),
+                child: page,
               ),
             ),
           ),

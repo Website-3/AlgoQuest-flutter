@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
 import 'package:flutter_application_1/services/game_service.dart';
+import 'package:flutter_application_1/widgets/hero_token.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -26,6 +27,8 @@ void main() {
     expect(find.text('Belok \u25B6'), findsOneWidget);
     expect(find.text('\u25C0 Belok'), findsOneWidget);
     expect(find.text('Serang'), findsOneWidget);
+    // Karakter memakai widget bersama HeroToken (sama seperti Petualangan).
+    expect(find.byType(HeroToken), findsOneWidget);
   });
 
   testWidgets('mengetuk perintah menambah blok', (tester) async {
@@ -42,7 +45,9 @@ void main() {
     expect(find.text('1/${level.maxBlocks}'), findsOneWidget);
   });
 
-  testWidgets('menggabungkan perintah yang sama jadi satu blok', (tester) async {
+  testWidgets('menggabungkan perintah yang sama jadi satu blok', (
+    tester,
+  ) async {
     await tester.pumpWidget(wrap());
     final MazeLevel level = MazeCatalog.level(0, 0);
 
@@ -57,14 +62,14 @@ void main() {
     expect(find.text('Maju  \u00D72'), findsOneWidget);
   });
 
-  testWidgets('alur lengkap: jalankan solusi sampai monster kalah',
-      (tester) async {
+  testWidgets('alur lengkap: jalankan solusi sampai monster kalah', (
+    tester,
+  ) async {
     await tester.pumpWidget(wrap());
     final MazeLevel level = MazeCatalog.level(0, 0);
 
     Future<void> add(GameCommand command) async {
-      final Finder button =
-          find.byKey(ValueKey<String>('cmd_${command.name}'));
+      final Finder button = find.byKey(ValueKey<String>('cmd_${command.name}'));
       await tester.ensureVisible(button);
       await tester.tap(button);
       await tester.pump();
@@ -80,8 +85,10 @@ void main() {
     // Semua blok harus tersusun (perintah berurutan digabung).
     var runs = 0;
     GameCommand? prev;
-    for (final GameCommand command
-        in <GameCommand>[...level.solution, GameCommand.attack]) {
+    for (final GameCommand command in <GameCommand>[
+      ...level.solution,
+      GameCommand.attack,
+    ]) {
       if (command != prev) {
         runs++;
         prev = command;
@@ -94,9 +101,11 @@ void main() {
     await tester.tap(run);
 
     // Dorong timer sampai semua perintah selesai dieksekusi.
-    for (var i = 0;
-        i < 400 && find.text('MONSTER DIKALAHKAN!').evaluate().isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 400 && find.text('MONSTER DIKALAHKAN!').evaluate().isEmpty;
+      i++
+    ) {
       await tester.pump(const Duration(milliseconds: 250));
     }
 

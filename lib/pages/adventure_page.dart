@@ -88,6 +88,18 @@ class _AdventurePageState extends State<AdventurePage>
   /// Cegah pemberian bintang dua kali untuk satu kemenangan.
   bool _rewarded = false;
 
+  /// Cegah penanganan kekalahan dua kali.
+  bool _lostHandled = false;
+
+  /// Animasi hancurnya monster (0 → 1). 1 = tidak ada animasi.
+  double _defeatAnim = 1;
+
+  /// Jeda singkat sebelum panel hasil muncul agar efek terlihat dulu.
+  double _resultDelay = 0;
+
+  /// Animasi munculnya panel hasil (0 → 1) untuk efek bintang "pop".
+  double _panelAnim = 0;
+
   bool get _en => widget.isEnglish;
 
   @override
@@ -112,6 +124,10 @@ class _AdventurePageState extends State<AdventurePage>
     _combat = CombatService.forLevel(widget.region, widget.level);
     _lastElapsed = Duration.zero;
     _rewarded = false;
+    _lostHandled = false;
+    _defeatAnim = 1;
+    _resultDelay = 0;
+    _panelAnim = 0;
     if (widget.debugStartFight) {
       _service.jumpTo(_level.monster.col + 0.5, _level.monster.row + 0.5 - 1.0);
       _combat.startFight();
@@ -135,9 +151,54 @@ class _AdventurePageState extends State<AdventurePage>
       _combat.update(s);
       if (!_rewarded && _combat.phase == FightPhase.won) {
         _rewarded = true;
+        _defeatAnim = 0; // mulai efek hancur
+        _resultDelay = 1.0; // tunda panel hasil agar efek terlihat
         _awardVictory();
       }
+      if (!_lostHandled && _combat.phase == FightPhase.lost) {
+        _lostHandled = true;
+        _resultDelay = 0.7;
+      }
     }
+    // Animasi halaman tetap berjalan meski tempur sudah usai.
+    if (_defeatAnim < 1) {
+      _defeatAnim = (_defeatAnim + s / 0.7).clamp(0.0, 1.0);
+    }
+    if (_resultDelay > 0) {
+      _resultDelay = math.max(0.0, _resultDelay - s);
+    }
+    final bool ended =
+        _combat.phase == FightPhase.won || _combat.phase == FightPhase.lost;
+    if (ended && _resultDelay <= 0 && _panelAnim < 1) {
+      _panelAnim = (_panelAnim + s / 0.5).clamp(0.0, 1.0);
+    }
+    // Paksa render ulang selama animasi pasca-tempur berlangsung: setelah
+    // tempur usai, layanan tidak lagi mengabarkan perubahan, padahal kita
+    // masih menganimasikan ledakan & panel hasil.
+    final bool animating =
+        _defeatAnim < 1 || _resultDelay > 0 || (ended && _panelAnim < 1);
+    if (animating && mounted) {
+      setState(() {});
+    }
+  }
+
+  /// Reset status tempur halaman sebelum memulai ronde baru.
+  void _resetFightState() {
+    _rewarded = false;
+    _lostHandled = false;
+    _defeatAnim = 1;
+    _resultDelay = 0;
+    _panelAnim = 0;
+  }
+
+  void _startFight() {
+    _resetFightState();
+    _combat.startFight();
+  }
+
+  void _rematch() {
+    _resetFightState();
+    _combat.rematch();
   }
 
   /// Bintang dari sisa HP pemain saat menang (makin utuh makin banyak).
@@ -364,12 +425,14 @@ class _AdventurePageState extends State<AdventurePage>
                 final Offset camera = Offset(camX, camY);
 
                 final bool fighting = _combat.isFighting;
-                final bool showResult =
+                final bool exploring = _combat.phase == FightPhase.exploring;
+                final bool ended =
                     _combat.phase == FightPhase.won ||
                     _combat.phase == FightPhase.lost;
+                final bool showResult = ended && _resultDelay <= 0;
                 final double mDist = _monsterDist;
                 final bool inFightRange =
-                    _combat.phase == FightPhase.exploring &&
+                    exploring &&
                     !_combat.monsterDefeated &&
                     mDist <= _fightRange;
 
@@ -402,12 +465,13 @@ class _AdventurePageState extends State<AdventurePage>
                               (_level.monster.row + 0.5) * cellPx - camera.dy,
                             ),
                             cellPx: cellPx,
+                            defeatAnim: _defeatAnim,
                           ),
                         ),
                       ),
                     ),
                     // Minimap (pojok kiri atas) — tersembunyi saat tempur
-                    if (!fighting && !showResult)
+                    if (exploring)
                       Positioned(
                         left: 10,
                         top: 10,
@@ -448,7 +512,7 @@ class _AdventurePageState extends State<AdventurePage>
                           ],
                         ),
                       )
-                    else if (!showResult)
+                    else if (exploring)
                       Positioned(
                         left: 90,
                         right: 90,
@@ -464,7 +528,7 @@ class _AdventurePageState extends State<AdventurePage>
                         child: Center(child: _fightButton()),
                       ),
                     // Joystick (disembunyikan saat tempur)
-                    if (!fighting && !showResult)
+                    if (exploring)
                       Positioned(
                         left: 10,
                         bottom: 10,
@@ -569,32 +633,39 @@ class _AdventurePageState extends State<AdventurePage>
           child: HeroToken(size: cellPx, facing: _service.facing),
         ),
         // Monster (muncul bila pernah terlihat & belum kalah; redup bila
-        // tak lagi terlihat langsung).
-        if (_service.isSeen(m.row, m.col) && !_combat.monsterDefeated)
+        // tak lagi terlihat langsung). Saat kalah, ia membesar lalu
+        // memudar sebagai efek hancur.
+        if (_service.isSeen(m.row, m.col) &&
+            (!_combat.monsterDefeated || _defeatAnim < 1))
           Positioned(
             left: mcx + monsterLunge.dx - cellPx * 0.45,
             top: mcy + monsterLunge.dy - cellPx * 0.45,
             width: cellPx * 0.9,
             height: cellPx * 0.9,
             child: Opacity(
-              opacity: _monsterOpacity(),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _combat.flashT > 0 ? Colors.white : _kRed,
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: _combat.flashT > 0
-                          ? Colors.white
-                          : _kPink.withValues(alpha: 0.55),
-                      blurRadius: 16,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.pest_control_rounded,
-                  color: Colors.redAccent,
-                  size: 26,
+              opacity: _combat.monsterDefeated
+                  ? (1 - _defeatAnim)
+                  : _monsterOpacity(),
+              child: Transform.scale(
+                scale: _combat.monsterDefeated ? 1 + _defeatAnim * 0.8 : 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _combat.flashT > 0 ? Colors.white : _kRed,
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: _combat.flashT > 0
+                            ? Colors.white
+                            : _kPink.withValues(alpha: 0.55),
+                        blurRadius: 16,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.pest_control_rounded,
+                    color: Colors.redAccent,
+                    size: 26,
+                  ),
                 ),
               ),
             ),
@@ -619,7 +690,7 @@ class _AdventurePageState extends State<AdventurePage>
   // ---------- Tombol TEMPUR ----------
   Widget _fightButton() {
     return GestureDetector(
-      onTap: _combat.startFight,
+      onTap: _startFight,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
         decoration: BoxDecoration(
@@ -657,119 +728,152 @@ class _AdventurePageState extends State<AdventurePage>
   // ---------- Panel hasil (menang / kalah) ----------
   Widget _resultPanel() {
     final bool won = _combat.phase == FightPhase.won;
+    final double panelT = _easeOutBack(_panelAnim);
     return Container(
       color: Colors.black.withValues(alpha: 0.62),
       alignment: Alignment.center,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 34),
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
-        decoration: BoxDecoration(
-          color: _kCard,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: won ? _kYellow.withValues(alpha: 0.6) : _kPink,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              won ? Icons.emoji_events : Icons.sentiment_dissatisfied,
-              color: won ? _kYellow : _kPink,
-              size: 40,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              won ? (_en ? 'VICTORY!' : 'MENANG!') : (_en ? 'DEFEAT' : 'KALAH'),
-              style: TextStyle(
-                color: won ? _kYellow : _kPink,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+      child: Opacity(
+        opacity: _panelAnim.clamp(0.0, 1.0),
+        child: Transform.scale(
+          scale: 0.85 + 0.15 * panelT,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 34),
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+            decoration: BoxDecoration(
+              color: _kCard,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: won ? _kYellow.withValues(alpha: 0.6) : _kPink,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              won
-                  ? (_en
-                        ? 'Monster defeated. Great logic!'
-                        : 'Monster dikalahkan. Logikamu hebat!')
-                  : (_en
-                        ? 'Your hero fell. Try again!'
-                        : 'Karaktermu tumbang. Coba lagi!'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: _kMuted, fontSize: 12),
-            ),
-            if (won) ...<Widget>[
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  for (var i = 0; i < 3; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(
-                        i < _victoryStars()
-                            ? Icons.star_rounded
-                            : Icons.star_border_rounded,
-                        color: _kYellow,
-                        size: 30,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 18),
-            Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      if (won && widget.onFinished != null) {
-                        widget.onFinished!(_victoryStars());
-                      } else {
-                        widget.onBack();
-                      }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _kText,
-                      side: const BorderSide(color: _kLine),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: Text(
-                      _en ? 'TO MAP' : 'KE PETA',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                Icon(
+                  won ? Icons.emoji_events : Icons.sentiment_dissatisfied,
+                  color: won ? _kYellow : _kPink,
+                  size: 40,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  won
+                      ? (_en ? 'VICTORY!' : 'MENANG!')
+                      : (_en ? 'DEFEAT' : 'KALAH'),
+                  style: TextStyle(
+                    color: won ? _kYellow : _kPink,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: won
-                        ? _combat.continueExploring
-                        : _combat.rematch,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: won ? _kCyan : _kPink,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: Text(
-                      won
-                          ? (_en ? 'CONTINUE' : 'LANJUT')
-                          : (_en ? 'RETRY' : 'COBA LAGI'),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                const SizedBox(height: 6),
+                Text(
+                  won
+                      ? (_en
+                            ? 'Monster defeated. Great logic!'
+                            : 'Monster dikalahkan. Logikamu hebat!')
+                      : (_en
+                            ? 'Your hero fell. Try again!'
+                            : 'Karaktermu tumbang. Coba lagi!'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _kMuted, fontSize: 12),
+                ),
+                if (won) ...<Widget>[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      for (var i = 0; i < 3; i++)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: _popStar(
+                            filled: i < _victoryStars(),
+                            delay: 0.25 + i * 0.12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          if (won && widget.onFinished != null) {
+                            widget.onFinished!(_victoryStars());
+                          } else {
+                            widget.onBack();
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _kText,
+                          side: const BorderSide(color: _kLine),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          _en ? 'TO MAP' : 'KE PETA',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: won ? _combat.continueExploring : _rematch,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: won ? _kCyan : _kPink,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          won
+                              ? (_en ? 'CONTINUE' : 'LANJUT')
+                              : (_en ? 'RETRY' : 'COBA LAGI'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Bintang dengan animasi "pop" berurutan mengikuti [_panelAnim].
+  Widget _popStar({required bool filled, required double delay}) {
+    if (!filled) {
+      return const Icon(Icons.star_border_rounded, color: _kYellow, size: 30);
+    }
+    final double p = ((_panelAnim - delay) / 0.3).clamp(0.0, 1.0);
+    return Transform.scale(
+      scale: 0.3 + 0.7 * _easeOutBack(p),
+      child: Opacity(
+        opacity: p.clamp(0.0, 1.0),
+        child: const Icon(
+          Icons.star_rounded,
+          color: _kYellow,
+          size: 30,
+          shadows: <Shadow>[Shadow(color: Color(0x66FFB21A), blurRadius: 12)],
+        ),
+      ),
+    );
+  }
+
+  /// Kurva "pop": sedikit melewati batas lalu kembali (overshoot).
+  static double _easeOutBack(double t) {
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1;
+    return 1 +
+        c3 * math.pow(t - 1, 3).toDouble() +
+        c1 * math.pow(t - 1, 2).toDouble();
   }
 
   Widget _hintChip() {
@@ -911,12 +1015,16 @@ class _CombatFxPainter extends CustomPainter {
     required this.playerPos,
     required this.monsterPos,
     required this.cellPx,
+    required this.defeatAnim,
   });
 
   final CombatService combat;
   final Offset playerPos;
   final Offset monsterPos;
   final double cellPx;
+
+  /// Animasi hancurnya monster (0 → 1). < 1 = sedang berlangsung.
+  final double defeatAnim;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -930,6 +1038,37 @@ class _CombatFxPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.5,
       );
+    }
+
+    // Ledakan kecil saat monster tumbang: cincin yang mengembang lalu
+    // memudar, plus percikan.
+    if (defeatAnim < 1) {
+      final double p = defeatAnim;
+      canvas.drawCircle(
+        monsterPos,
+        cellPx * (0.4 + p * 0.9),
+        Paint()
+          ..color = const Color(0xFFFFB21A).withValues(alpha: (1 - p) * 0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5 * (1 - p) + 0.5,
+      );
+      canvas.drawCircle(
+        monsterPos,
+        cellPx * (0.2 + p * 0.55),
+        Paint()
+          ..color = const Color(0xFFFF5E5E).withValues(alpha: (1 - p) * 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * (1 - p),
+      );
+      for (int i = 0; i < 8; i++) {
+        final double a = i * math.pi / 4 + p * 0.6;
+        final double r = cellPx * (0.25 + p * 0.75);
+        canvas.drawCircle(
+          monsterPos + Offset(math.cos(a) * r, math.sin(a) * r),
+          (1 - p) * cellPx * 0.07 + 1,
+          Paint()..color = const Color(0xFFFFD166).withValues(alpha: 1 - p),
+        );
+      }
     }
 
     if (!combat.isFighting) return;

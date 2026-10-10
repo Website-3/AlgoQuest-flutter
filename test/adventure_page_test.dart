@@ -12,8 +12,10 @@ import 'package:flutter_application_1/widgets/minimap.dart';
 import 'package:flutter_application_1/widgets/virtual_joystick.dart';
 
 MazeLevel _openLevel() {
-  final List<List<bool>> walls =
-      List<List<bool>>.generate(5, (_) => List<bool>.filled(5, false));
+  final List<List<bool>> walls = List<List<bool>>.generate(
+    5,
+    (_) => List<bool>.filled(5, false),
+  );
   return MazeLevel(
     region: 0,
     level: 0,
@@ -60,8 +62,9 @@ void _resetProgress() {
 void main() {
   setUp(_resetProgress);
 
-  testWidgets('menampilkan elemen utama halaman petualangan',
-      (WidgetTester tester) async {
+  testWidgets('menampilkan elemen utama halaman petualangan', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(_wrap());
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -76,8 +79,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('karakter bergerak saat tombol panah ditekan',
-      (WidgetTester tester) async {
+  testWidgets('karakter bergerak saat tombol panah ditekan', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(_wrap());
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -94,8 +98,9 @@ void main() {
     expect(after.dx, greaterThan(before.dx));
   });
 
-  testWidgets('karakter bergerak saat joystick digeser',
-      (WidgetTester tester) async {
+  testWidgets('karakter bergerak saat joystick digeser', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(_wrap());
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -114,8 +119,9 @@ void main() {
     expect(after.dx, greaterThan(before.dx));
   });
 
-  testWidgets('dekat monster memunculkan TEMPUR lalu masuk mode tempur',
-      (WidgetTester tester) async {
+  testWidgets('dekat monster memunculkan TEMPUR lalu masuk mode tempur', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(_wrap(debug: true));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -155,50 +161,59 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('menang memberi bintang mode Petualangan & memanggil onFinished',
-      (WidgetTester tester) async {
-    int? awarded;
-    await tester.pumpWidget(
-      _wrap(debug: true, onFinished: (int stars) => awarded = stars),
-    );
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Dekati monster (3,3).
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    for (int i = 0; i < 13; i++) {
+  testWidgets(
+    'menang memberi bintang mode Petualangan & memanggil onFinished',
+    (WidgetTester tester) async {
+      int? awarded;
+      await tester.pumpWidget(
+        _wrap(debug: true, onFinished: (int stars) => awarded = stars),
+      );
       await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
-    for (int i = 0; i < 8; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
 
-    // Mulai tempur lalu serang berulang sampai monster tumbang.
-    await tester.tap(find.textContaining('TEMPUR'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    for (int i = 0; i < 10 && find.text('MENANG!').evaluate().isEmpty; i++) {
-      await tester.tap(find.text('SERANG'));
-      for (int j = 0; j < 10; j++) {
+      // Dekati monster (3,3).
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      for (int i = 0; i < 13; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
-    }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+      for (int i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
 
-    expect(find.text('MENANG!'), findsOneWidget);
-    expect(
-      MapProgress.starsOf(0, 0, GameMode.adventure),
-      greaterThan(0),
-    );
+      // Mulai tempur lalu serang berulang sampai monster tumbang.
+      await tester.tap(find.textContaining('TEMPUR'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    // Kembali ke peta -> onFinished dipanggil dengan bintang.
-    await tester.tap(find.text('KE PETA'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(awarded, isNotNull);
-    expect(awarded, greaterThan(0));
-  });
+      for (
+        int i = 0;
+        i < 30 && find.text('SERANG').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.tap(find.text('SERANG'));
+        for (int j = 0; j < 4; j++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      }
+
+      // Panel hasil baru muncul setelah jeda animasi (ledakan + pop panel).
+      expect(find.text('MENANG!'), findsNothing);
+      for (int j = 0; j < 30; j++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('MENANG!'), findsOneWidget);
+      expect(MapProgress.starsOf(0, 0, GameMode.adventure), greaterThan(0));
+
+      // Kembali ke peta -> onFinished dipanggil dengan bintang.
+      await tester.tap(find.text('KE PETA'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(awarded, isNotNull);
+      expect(awarded, greaterThan(0));
+    },
+  );
 }

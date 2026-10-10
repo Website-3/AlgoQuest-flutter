@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../services/game_service.dart';
 import '../widgets/app_header.dart';
+import '../widgets/hero_token.dart';
 import 'map_page.dart';
 
 // ============================================================
-// GAME PAGE — INTI PERMAINAN (LABIRIN + MONSTER)
+// GAME PAGE â€” INTI PERMAINAN (LABIRIN + MONSTER)
 // ============================================================
 // Alur permainan:
 //   1. Karakter berada di dalam labirin.
@@ -607,29 +608,10 @@ class _GamePageState extends State<GamePage>
   }
 
   /// Karakter pemain (bentuk orang, bukan kursor) + penunjuk arah hadap.
+  /// Memakai widget bersama [HeroToken] agar konsisten dengan Mode
+  /// Petualangan.
   Widget _heroToken(double size) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          Positioned.fill(
-            child: Transform.rotate(
-              angle: (_engine.dir - 1) * math.pi / 2,
-              child: CustomPaint(
-                painter: _FacingPainter(color: _kCyan.withValues(alpha: 0.6)),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: size,
-            height: size,
-            child: CustomPaint(painter: _HeroPainter()),
-          ),
-        ],
-      ),
-    );
+    return HeroToken(size: size, facing: _engine.dir);
   }
 
   Widget _monsterToken(double size, double t) {
@@ -1221,150 +1203,6 @@ class _GamePageState extends State<GamePage>
         return Icons.local_fire_department_rounded;
     }
   }
-}
-
-// ============================================================
-// KARAKTER PEMAIN
-// ============================================================
-class _HeroPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double s = size.width;
-
-    // Bayangan
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(s * 0.5, s * 0.94),
-        width: s * 0.6,
-        height: s * 0.14,
-      ),
-      Paint()..color = Colors.black.withValues(alpha: 0.35),
-    );
-
-    // Kaki
-    final Paint leg = Paint()..color = const Color(0xFF23324C);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.35, s * 0.64, s * 0.12, s * 0.26),
-        Radius.circular(s * 0.05),
-      ),
-      leg,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.53, s * 0.64, s * 0.12, s * 0.26),
-        Radius.circular(s * 0.05),
-      ),
-      leg,
-    );
-
-    // Pedang (di sisi kanan)
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34),
-        Radius.circular(s * 0.03),
-      ),
-      Paint()..color = const Color(0xFFDCE6EA),
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.72, s * 0.46, s * 0.19, s * 0.05),
-        Radius.circular(s * 0.02),
-      ),
-      Paint()..color = const Color(0xFFC08A2E),
-    );
-
-    // Lengan
-    final Paint arm = Paint()..color = const Color(0xFF2F8FC4);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.17, s * 0.45, s * 0.14, s * 0.24),
-        Radius.circular(s * 0.07),
-      ),
-      arm,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.69, s * 0.45, s * 0.14, s * 0.24),
-        Radius.circular(s * 0.07),
-      ),
-      arm,
-    );
-
-    // Badan
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29),
-        Radius.circular(s * 0.1),
-      ),
-      Paint()..color = const Color(0xFF3FC6F5),
-    );
-    // Sabuk
-    canvas.drawRect(
-      Rect.fromLTWH(s * 0.29, s * 0.635, s * 0.42, s * 0.04),
-      Paint()..color = const Color(0xFF1B6E8C),
-    );
-
-    // Kepala
-    final Offset head = Offset(s * 0.5, s * 0.29);
-    canvas.drawCircle(head, s * 0.19, Paint()..color = const Color(0xFFFFD3A8));
-    // Helm / rambut
-    canvas.drawArc(
-      Rect.fromCircle(center: head, radius: s * 0.19),
-      math.pi * 1.02,
-      math.pi * 0.96,
-      true,
-      Paint()..color = const Color(0xFF22314A),
-    );
-    // Mata
-    final Paint eye = Paint()..color = const Color(0xFF14232E);
-    canvas.drawCircle(Offset(s * 0.435, s * 0.30), s * 0.028, eye);
-    canvas.drawCircle(Offset(s * 0.565, s * 0.30), s * 0.028, eye);
-    // Senyum
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(s * 0.5, s * 0.345), radius: s * 0.06),
-      0.25,
-      math.pi - 0.5,
-      false,
-      Paint()
-        ..color = const Color(0xFF14232E)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.022
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _HeroPainter oldDelegate) => false;
-}
-
-/// Panah penunjuk arah hadap karakter (di atas lantai).
-class _FacingPainter extends CustomPainter {
-  final Color color;
-
-  _FacingPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double s = size.width;
-    final Path path = Path()
-      ..moveTo(s * 0.24, s * 0.16)
-      ..lineTo(s * 0.84, s * 0.5)
-      ..lineTo(s * 0.24, s * 0.84);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.13
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _FacingPainter oldDelegate) =>
-      oldDelegate.color != color;
 }
 
 /// Efek tebasan saat menyerang.

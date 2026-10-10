@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../services/app_settings.dart';
+import '../services/audio_service.dart';
+import '../services/juice.dart';
 import '../widgets/app_header.dart';
 import '../widgets/settings_card.dart';
 
@@ -25,9 +28,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool soundOn = true;
-  bool musicOn = true;
-  bool notificationOn = true;
+  bool soundOn = GameAudio.instance.enabled;
+  bool hapticsOn = Juice.hapticsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -113,24 +115,22 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ? 'Sound Effects'
                                 : 'Efek Suara',
                             value: soundOn,
-                            onChanged: (v) => setState(() => soundOn = v),
+                            onChanged: (v) {
+                              setState(() => soundOn = v);
+                              AppSettings.setSound(v);
+                              if (v) Juice.click();
+                            },
                           ),
                           const Divider(color: Colors.white10, height: 1),
                           _SwitchTile(
-                            icon: Icons.music_note_outlined,
-                            title: widget.isEnglish ? 'Music' : 'Musik',
-                            value: musicOn,
-                            onChanged: (v) => setState(() => musicOn = v),
-                          ),
-                          const Divider(color: Colors.white10, height: 1),
-                          _SwitchTile(
-                            icon: Icons.notifications_outlined,
-                            title: widget.isEnglish
-                                ? 'Notifications'
-                                : 'Notifikasi',
-                            value: notificationOn,
-                            onChanged: (v) =>
-                                setState(() => notificationOn = v),
+                            icon: Icons.vibration,
+                            title: widget.isEnglish ? 'Vibration' : 'Getaran',
+                            value: hapticsOn,
+                            onChanged: (v) {
+                              setState(() => hapticsOn = v);
+                              AppSettings.setHaptics(v);
+                              if (v) Juice.click();
+                            },
                           ),
                         ],
                       ),
@@ -252,6 +252,11 @@ class _SwitchTile extends StatelessWidget {
           onChanged: onChanged,
           activeTrackColor: const Color(0xFF42CFFF),
           inactiveTrackColor: const Color(0xFF363B39),
+          thumbColor: WidgetStateProperty.resolveWith<Color>(
+            (Set<WidgetState> states) => states.contains(WidgetState.selected)
+                ? const Color(0xFF0B100F)
+                : const Color(0xFF8A9795),
+          ),
         ),
       ],
     );

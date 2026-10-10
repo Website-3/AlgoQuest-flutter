@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
+import 'package:flutter_application_1/pages/settings_page.dart';
 import 'package:flutter_application_1/pages/statistics_page.dart';
 
 void main() {
@@ -92,6 +93,8 @@ class PreviewApp extends StatelessWidget {
         ? MapPreview(openDialog: dlg)
         : mode == 'stats'
         ? StatisticsPage(isEnglish: false, onLanguageChanged: () {})
+        : mode == 'settings'
+        ? SettingsPage(isEnglish: false, onLanguageChanged: () {})
         : mode == 'adventure'
         ? AdventurePage(
             region: region,

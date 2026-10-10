@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/game_service.dart';
+import '../services/juice.dart';
 import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
 import 'map_page.dart';
@@ -123,9 +124,11 @@ class _GamePageState extends State<GamePage>
         _blocks.last.command == command &&
         _blocks.last.count < 9;
     if (!canMerge && _blocks.length >= _level.maxBlocks) {
+      Juice.error();
       _toast(_en ? 'Block limit reached.' : 'Batas blok tercapai.');
       return;
     }
+    Juice.click();
     setState(() {
       if (canMerge) {
         _blocks.last.count++;
@@ -137,6 +140,7 @@ class _GamePageState extends State<GamePage>
 
   void _decBlock(int index) {
     if (_running) return;
+    Juice.click();
     setState(() {
       if (_blocks[index].count > 1) {
         _blocks[index].count--;
@@ -148,11 +152,13 @@ class _GamePageState extends State<GamePage>
 
   void _removeBlock(int index) {
     if (_running) return;
+    Juice.click();
     setState(() => _blocks.removeAt(index));
   }
 
   void _clearBlocks() {
     if (_running) return;
+    Juice.click();
     setState(() {
       _blocks.clear();
       _engine.reset();
@@ -163,6 +169,7 @@ class _GamePageState extends State<GamePage>
   Future<void> _run() async {
     if (_running) return;
     if (_blocks.isEmpty) {
+      Juice.error();
       _toast(
         _en
             ? 'Add some command blocks first.'
@@ -171,6 +178,7 @@ class _GamePageState extends State<GamePage>
       return;
     }
 
+    Juice.click();
     setState(() {
       _running = true;
       _engine.reset();
@@ -187,9 +195,13 @@ class _GamePageState extends State<GamePage>
 
       if (outcome == StepOutcome.hit) {
         // Animasi menyerang monster.
+        Juice.attack();
         _attackCtrl.forward(from: 0);
         await Future<void>.delayed(const Duration(milliseconds: 440));
       } else {
+        if (outcome == StepOutcome.blocked || outcome == StepOutcome.missed) {
+          Juice.error();
+        }
         await Future<void>.delayed(const Duration(milliseconds: 240));
       }
     }
@@ -200,6 +212,7 @@ class _GamePageState extends State<GamePage>
     if (_engine.defeated) {
       await _showVictory(_computeStars());
     } else {
+      Juice.error();
       _toast(
         _en
             ? 'Monster is not defeated yet. Try again!'
@@ -220,6 +233,9 @@ class _GamePageState extends State<GamePage>
         MapProgress.starsOf(widget.region, widget.level, GameMode.logic)) {
       MapProgress.setStars(widget.region, widget.level, GameMode.logic, stars);
     }
+
+    Juice.victory();
+    Juice.star();
 
     final bool? next = await showDialog<bool>(
       context: context,
@@ -1047,7 +1063,10 @@ class _GamePageState extends State<GamePage>
               children: <Widget>[
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
+                    onPressed: () {
+                      Juice.click();
+                      Navigator.of(ctx).pop(false);
+                    },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _kText,
                       side: const BorderSide(color: _kLine),
@@ -1062,7 +1081,10 @@ class _GamePageState extends State<GamePage>
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
+                    onPressed: () {
+                      Juice.click();
+                      Navigator.of(ctx).pop(true);
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _kOrange,
                       foregroundColor: Colors.black,

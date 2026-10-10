@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 
 import 'pages/map_page.dart';
 import 'pages/splash_page.dart';
+import 'services/app_settings.dart';
+import 'services/audio_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Muat progres bintang yang tersimpan sebelum UI tampil.
+  // Suara aktif secara bawaan (bisa dimatikan di Pengaturan).
+  GameAudio.instance.enabled = true;
+  // Muat progres bintang & preferensi yang tersimpan sebelum UI tampil.
   await MapProgress.load();
+  await AppSettings.load();
+  GameAudio.instance.warmUp();
   runApp(const MyApp());
 }
 

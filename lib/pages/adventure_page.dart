@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../services/adventure_service.dart';
 import '../services/combat_service.dart';
 import '../services/game_service.dart';
+import '../services/juice.dart';
 import '../widgets/action_button.dart';
 import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
@@ -100,6 +101,13 @@ class _AdventurePageState extends State<AdventurePage>
   /// Animasi munculnya panel hasil (0 → 1) untuk efek bintang "pop".
   double _panelAnim = 0;
 
+  /// Getaran layar + kilat merah saat pemain terkena hantaman (0..[_hurtMax]).
+  static const double _hurtMax = 0.4;
+  double _hurtShake = 0;
+
+  /// Cegah bunyi bintang diputar dua kali untuk satu kemenangan.
+  bool _starSound = false;
+
   bool get _en => widget.isEnglish;
 
   @override
@@ -128,6 +136,8 @@ class _AdventurePageState extends State<AdventurePage>
     _defeatAnim = 1;
     _resultDelay = 0;
     _panelAnim = 0;
+    _hurtShake = 0;
+    _starSound = false;
     if (widget.debugStartFight) {
       _service.jumpTo(_level.monster.col + 0.5, _level.monster.row + 0.5 - 1.0);
       _combat.startFight();
@@ -148,16 +158,27 @@ class _AdventurePageState extends State<AdventurePage>
     _service.update(s);
     if (_combat.isFighting) {
       _service.setInput(Offset.zero); // pemain diam saat bertarung
+      final double hpBefore = _combat.playerHp;
+      final double mHpBefore = _combat.monsterHp;
       _combat.update(s);
+      if (_combat.monsterHp < mHpBefore && _combat.phase != FightPhase.won) {
+        Juice.hit();
+      }
+      if (_combat.playerHp < hpBefore) {
+        Juice.hurt();
+        _hurtShake = _hurtMax;
+      }
       if (!_rewarded && _combat.phase == FightPhase.won) {
         _rewarded = true;
         _defeatAnim = 0; // mulai efek hancur
         _resultDelay = 1.0; // tunda panel hasil agar efek terlihat
+        Juice.victory();
         _awardVictory();
       }
       if (!_lostHandled && _combat.phase == FightPhase.lost) {
         _lostHandled = true;
         _resultDelay = 0.7;
+        Juice.defeat();
       }
     }
     // Animasi halaman tetap berjalan meski tempur sudah usai.
@@ -167,16 +188,25 @@ class _AdventurePageState extends State<AdventurePage>
     if (_resultDelay > 0) {
       _resultDelay = math.max(0.0, _resultDelay - s);
     }
+    _hurtShake = math.max(0.0, _hurtShake - s);
     final bool ended =
         _combat.phase == FightPhase.won || _combat.phase == FightPhase.lost;
     if (ended && _resultDelay <= 0 && _panelAnim < 1) {
+      final bool wasHidden = _panelAnim <= 0;
       _panelAnim = (_panelAnim + s / 0.5).clamp(0.0, 1.0);
+      if (wasHidden && _combat.phase == FightPhase.won && !_starSound) {
+        _starSound = true;
+        Juice.star();
+      }
     }
     // Paksa render ulang selama animasi pasca-tempur berlangsung: setelah
     // tempur usai, layanan tidak lagi mengabarkan perubahan, padahal kita
     // masih menganimasikan ledakan & panel hasil.
     final bool animating =
-        _defeatAnim < 1 || _resultDelay > 0 || (ended && _panelAnim < 1);
+        _defeatAnim < 1 ||
+        _resultDelay > 0 ||
+        (ended && _panelAnim < 1) ||
+        _hurtShake > 0;
     if (animating && mounted) {
       setState(() {});
     }
@@ -189,14 +219,18 @@ class _AdventurePageState extends State<AdventurePage>
     _defeatAnim = 1;
     _resultDelay = 0;
     _panelAnim = 0;
+    _hurtShake = 0;
+    _starSound = false;
   }
 
   void _startFight() {
+    Juice.click();
     _resetFightState();
     _combat.startFight();
   }
 
   void _rematch() {
+    Juice.click();
     _resetFightState();
     _combat.rematch();
   }
@@ -422,7 +456,8 @@ class _AdventurePageState extends State<AdventurePage>
                 double camY = _service.y * cellPx - vh / 2;
                 camX = camX.clamp(0.0, math.max(0.0, worldW - vw));
                 camY = camY.clamp(0.0, math.max(0.0, worldH - vh));
-                final Offset camera = Offset(camX, camY);
+                // Getaran layar saat pemain terkena hantaman.
+                final Offset camera = Offset(camX, camY) + _hurtOffset();
 
                 final bool fighting = _combat.isFighting;
                 final bool exploring = _combat.phase == FightPhase.exploring;
@@ -470,6 +505,25 @@ class _AdventurePageState extends State<AdventurePage>
                         ),
                       ),
                     ),
+                    // Kilat merah di tepi layar saat pemain terkena hantaman.
+                    if (_hurtShake > 0)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                radius: 0.9,
+                                colors: <Color>[
+                                  Colors.transparent,
+                                  _kRed.withValues(
+                                    alpha: (_hurtShake / _hurtMax) * 0.45,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     // Minimap (pojok kiri atas) — tersembunyi saat tempur
                     if (exploring)
                       Positioned(
@@ -553,14 +607,20 @@ class _AdventurePageState extends State<AdventurePage>
                               icon: Icons.sports_kabaddi,
                               label: _en ? 'ATTACK' : 'SERANG',
                               color: _kPink,
-                              onTap: _combat.attack,
+                              onTap: () {
+                                Juice.attack();
+                                _combat.attack();
+                              },
                               enabled: !_combat.attacking,
                             ),
                             ActionButton(
                               icon: Icons.auto_awesome,
                               label: _en ? 'SKILL' : 'SKILL',
                               color: _kCyan,
-                              onTap: _combat.skill,
+                              onTap: () {
+                                Juice.skill();
+                                _combat.skill();
+                              },
                               cooldown: _combat.skillCdRatio,
                               enabled: _combat.skillReady,
                             ),
@@ -568,7 +628,10 @@ class _AdventurePageState extends State<AdventurePage>
                               icon: Icons.shield,
                               label: _en ? 'DODGE' : 'DODGE',
                               color: const Color(0xFF35D07F),
-                              onTap: _combat.dodge,
+                              onTap: () {
+                                Juice.dodge();
+                                _combat.dodge();
+                              },
                               cooldown: _combat.dodgeCdRatio,
                               enabled: _combat.dodgeReady,
                             ),
@@ -679,6 +742,16 @@ class _AdventurePageState extends State<AdventurePage>
     final double dy = (_level.monster.row + 0.5) - _service.y;
     final double v = math.sqrt(dx * dx + dy * dy);
     return v <= AdventureService.visRadius ? 1.0 : 0.45;
+  }
+
+  /// Pergeseran getaran layar saat pemain terkena hantaman.
+  Offset _hurtOffset() {
+    if (_hurtShake <= 0) return Offset.zero;
+    final double k = _hurtShake / _hurtMax;
+    return Offset(
+      math.sin(_hurtShake * 60) * 7 * k,
+      math.cos(_hurtShake * 45) * 7 * k,
+    );
   }
 
   double get _monsterDist {
@@ -800,6 +873,7 @@ class _AdventurePageState extends State<AdventurePage>
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
+                          Juice.click();
                           if (won && widget.onFinished != null) {
                             widget.onFinished!(_victoryStars());
                           } else {
@@ -820,7 +894,12 @@ class _AdventurePageState extends State<AdventurePage>
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton(
-                        onPressed: won ? _combat.continueExploring : _rematch,
+                        onPressed: won
+                            ? () {
+                                Juice.click();
+                                _combat.continueExploring();
+                              }
+                            : _rematch,
                         style: FilledButton.styleFrom(
                           backgroundColor: won ? _kCyan : _kPink,
                           foregroundColor: Colors.black,

@@ -73,41 +73,70 @@ class _HeroPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double s = size.width;
 
-    // Bayangan
+    // Bayangan di lantai
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(s * 0.5, s * 0.94),
-        width: s * 0.6,
-        height: s * 0.14,
+        width: s * 0.64,
+        height: s * 0.15,
       ),
-      Paint()..color = Colors.black.withValues(alpha: 0.35),
+      Paint()..color = Colors.black.withValues(alpha: 0.38),
+    );
+
+    // Garis tepi gelap (membuat karakter menonjol dari latar).
+    final Paint outline = Paint()
+      ..color = const Color(0xFF0C1522)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.026
+      ..strokeJoin = StrokeJoin.round;
+
+    // Jubah di belakang badan.
+    final Path cape = Path()
+      ..moveTo(s * 0.30, s * 0.44)
+      ..quadraticBezierTo(s * 0.16, s * 0.68, s * 0.24, s * 0.85)
+      ..lineTo(s * 0.76, s * 0.85)
+      ..quadraticBezierTo(s * 0.84, s * 0.68, s * 0.70, s * 0.44)
+      ..close();
+    canvas.drawPath(cape, Paint()..color = const Color(0xFF1C5470));
+    canvas.drawPath(
+      cape,
+      Paint()
+        ..color = const Color(0xFF0C1522)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.02
+        ..strokeJoin = StrokeJoin.round,
     );
 
     // Kaki
     final Paint leg = Paint()..color = const Color(0xFF23324C);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.35, s * 0.64, s * 0.12, s * 0.26),
-        Radius.circular(s * 0.05),
-      ),
-      leg,
+    final RRect legL = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.35, s * 0.64, s * 0.12, s * 0.26),
+      Radius.circular(s * 0.05),
     );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.53, s * 0.64, s * 0.12, s * 0.26),
-        Radius.circular(s * 0.05),
-      ),
-      leg,
+    final RRect legR = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.53, s * 0.64, s * 0.12, s * 0.26),
+      Radius.circular(s * 0.05),
     );
+    canvas.drawRRect(legL, leg);
+    canvas.drawRRect(legR, leg);
+    canvas.drawRRect(legL, outline);
+    canvas.drawRRect(legR, outline);
 
     // Pedang (di sisi kanan)
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34),
-        Radius.circular(s * 0.03),
-      ),
-      Paint()..color = const Color(0xFFDCE6EA),
+    final RRect blade = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34),
+      Radius.circular(s * 0.03),
     );
+    canvas.drawRRect(
+      blade,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[Color(0xFFFFFFFF), Color(0xFF9FB4BE)],
+        ).createShader(Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34)),
+    );
+    canvas.drawRRect(blade, outline..strokeWidth = s * 0.018);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(s * 0.72, s * 0.46, s * 0.19, s * 0.05),
@@ -118,28 +147,41 @@ class _HeroPainter extends CustomPainter {
 
     // Lengan
     final Paint arm = Paint()..color = const Color(0xFF2F8FC4);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.17, s * 0.45, s * 0.14, s * 0.24),
-        Radius.circular(s * 0.07),
-      ),
-      arm,
+    final RRect armL = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.17, s * 0.45, s * 0.14, s * 0.24),
+      Radius.circular(s * 0.07),
     );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.69, s * 0.45, s * 0.14, s * 0.24),
-        Radius.circular(s * 0.07),
-      ),
-      arm,
+    final RRect armR = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.69, s * 0.45, s * 0.14, s * 0.24),
+      Radius.circular(s * 0.07),
     );
+    canvas.drawRRect(armL, arm);
+    canvas.drawRRect(armR, arm);
+    canvas.drawRRect(armL, outline..strokeWidth = s * 0.022);
+    canvas.drawRRect(armR, outline);
 
-    // Badan
+    // Badan (bergradasi agar terlihat bervolume)
+    final RRect bodyRR = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29),
+      Radius.circular(s * 0.1),
+    );
+    canvas.drawRRect(
+      bodyRR,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[Color(0xFF6FDFFF), Color(0xFF2E9FCF)],
+        ).createShader(Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29)),
+    );
+    canvas.drawRRect(bodyRR, outline..strokeWidth = s * 0.024);
+    // Kilau badan
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29),
-        Radius.circular(s * 0.1),
+        Rect.fromLTWH(s * 0.34, s * 0.45, s * 0.12, s * 0.06),
+        Radius.circular(s * 0.03),
       ),
-      Paint()..color = const Color(0xFF3FC6F5),
+      Paint()..color = Colors.white.withValues(alpha: 0.28),
     );
     // Sabuk
     canvas.drawRect(
@@ -149,7 +191,24 @@ class _HeroPainter extends CustomPainter {
 
     // Kepala
     final Offset head = Offset(s * 0.5, s * 0.29);
-    canvas.drawCircle(head, s * 0.19, Paint()..color = const Color(0xFFFFD3A8));
+    canvas.drawCircle(
+      head,
+      s * 0.19,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(-0.3, -0.4),
+          radius: 0.95,
+          colors: <Color>[Color(0xFFFFE4C6), Color(0xFFF0C296)],
+        ).createShader(Rect.fromCircle(center: head, radius: s * 0.19)),
+    );
+    canvas.drawCircle(
+      head,
+      s * 0.19,
+      Paint()
+        ..color = const Color(0xFF0C1522)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.024,
+    );
     // Helm / rambut
     canvas.drawArc(
       Rect.fromCircle(center: head, radius: s * 0.19),

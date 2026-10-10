@@ -13,6 +13,7 @@ import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
 import '../widgets/hp_bar.dart';
 import '../widgets/minimap.dart';
+import '../widgets/monster_token.dart';
 import '../widgets/virtual_joystick.dart';
 import 'map_page.dart';
 
@@ -713,21 +714,21 @@ class _AdventurePageState extends State<AdventurePage>
                 scale: _combat.monsterDefeated ? 1 + _defeatAnim * 0.8 : 1,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: _combat.flashT > 0 ? Colors.white : _kRed,
                     borderRadius: BorderRadius.circular(11),
                     boxShadow: <BoxShadow>[
                       BoxShadow(
                         color: _combat.flashT > 0
                             ? Colors.white
-                            : _kPink.withValues(alpha: 0.55),
+                            : _kPink.withValues(alpha: 0.5),
                         blurRadius: 16,
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.pest_control_rounded,
-                    color: Colors.redAccent,
-                    size: 26,
+                  child: MonsterToken(
+                    size: cellPx * 0.9,
+                    flash: (_combat.flashT / 0.15).clamp(0.0, 1.0),
+                    defeated: _combat.monsterDefeated,
+                    tint: _kRed,
                   ),
                 ),
               ),
@@ -1006,6 +1007,9 @@ class _MazeWorldPainter extends CustomPainter {
   static const Color _wallLine = Color(0xFF2A3432);
   static const Color _hidden = Color(0xFF070B0A);
   static const Color _dimOverlay = Color(0xFF050808);
+  static const Color _floorAlt = Color(0xFF0B1110);
+  static const Color _wallTop = Color(0xFF36433F);
+  static const Color _wallShadow = Color(0xFF0C1211);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1014,11 +1018,19 @@ class _MazeWorldPainter extends CustomPainter {
     canvas.translate(-camera.dx, -camera.dy);
 
     final Paint floorPaint = Paint()..color = _floor;
+    final Paint floorAltPaint = Paint()..color = _floorAlt;
     final Paint tilePaint = Paint()
       ..color = _floorLine
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final Paint wallPaint = Paint()..color = _wall;
+    final Paint wallTopPaint = Paint()
+      ..color = _wallTop
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final Paint wallShadowPaint = Paint()
+      ..color = _wallShadow
+      ..strokeWidth = 2;
     final Paint wallBorderPaint = Paint()
       ..color = _wallLine
       ..style = PaintingStyle.stroke
@@ -1038,16 +1050,24 @@ class _MazeWorldPainter extends CustomPainter {
         }
 
         if (level.walls[r][c]) {
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(cell, const Radius.circular(4)),
-            wallPaint,
+          final RRect rr =
+              RRect.fromRectAndRadius(cell, const Radius.circular(4));
+          canvas.drawRRect(rr, wallPaint);
+          // Sisi atas terang & sisi bawah gelap → kesan dinding bertebal.
+          canvas.drawLine(
+            cell.topLeft.translate(3, 1.5),
+            cell.topRight.translate(-3, 1.5),
+            wallTopPaint,
           );
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(cell, const Radius.circular(4)),
-            wallBorderPaint,
+          canvas.drawLine(
+            cell.bottomLeft.translate(3, -1.5),
+            cell.bottomRight.translate(-3, -1.5),
+            wallShadowPaint,
           );
+          canvas.drawRRect(rr, wallBorderPaint);
         } else {
-          canvas.drawRect(cell, floorPaint);
+          // Lantai papan catur halus supaya ada tekstur.
+          canvas.drawRect(cell, (r + c).isEven ? floorPaint : floorAltPaint);
           canvas.drawRect(cell, tilePaint);
         }
 

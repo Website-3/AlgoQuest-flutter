@@ -115,10 +115,13 @@ class PreviewApp extends StatelessWidget {
             debugAttack: fx,
           );
 
+    final ThemeData base = ThemeData.dark();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
+      theme: base.copyWith(
         scaffoldBackgroundColor: const Color(0xFF0B0F0F),
+        textTheme: base.textTheme.apply(fontFamily: 'Poppins'),
+        primaryTextTheme: base.primaryTextTheme.apply(fontFamily: 'Poppins'),
       ),
       home: ColoredBox(
         color: const Color(0xFF050808),

@@ -6,6 +6,7 @@ import '../services/game_service.dart';
 import '../services/juice.dart';
 import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
+import '../widgets/monster_token.dart';
 import 'map_page.dart';
 
 // ============================================================
@@ -633,32 +634,31 @@ class _GamePageState extends State<GamePage>
   Widget _monsterToken(double size, double t) {
     final bool dead = _engine.defeated;
     final double flash = _hitFlash(t);
-    final Color body = Color.lerp(_kRed, Colors.white, flash) ?? _kRed;
     return Opacity(
-      opacity: dead ? 0.25 : 1,
+      opacity: dead ? 0.35 : 1,
       child: Transform.scale(
         scale: 1 + flash * 0.18,
         child: Container(
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: body,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(size * 0.28),
             boxShadow: dead
                 ? null
                 : <BoxShadow>[
                     BoxShadow(
                       color: (flash > 0 ? Colors.white : _kPink).withValues(
-                        alpha: flash > 0 ? 0.9 : 0.5,
+                        alpha: flash > 0 ? 0.7 : 0.4,
                       ),
                       blurRadius: flash > 0 ? 20 : 12,
                     ),
                   ],
           ),
-          child: Icon(
-            dead ? Icons.check_rounded : Icons.pest_control,
-            color: Colors.white,
-            size: size * 0.62,
+          child: MonsterToken(
+            size: size,
+            flash: flash,
+            defeated: dead,
+            tint: _kRed,
           ),
         ),
       ),
@@ -1270,38 +1270,67 @@ class _MazePainter extends CustomPainter {
     final double cell = size.width / level.size;
 
     final Paint floor = Paint()..color = const Color(0xFF0E1615);
+    final Paint floorAlt = Paint()..color = const Color(0xFF0A100F);
     final Paint wall = Paint()..color = const Color(0xFF27312F);
-    final Paint wallEdge = Paint()..color = const Color(0xFF33403D);
+    final Paint wallTop = Paint()
+      ..color = const Color(0xFF3D4B47)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final Paint wallShadow = Paint()
+      ..color = const Color(0xFF141B19)
+      ..strokeWidth = 2;
+    final Paint wallEdge = Paint()
+      ..color = const Color(0xFF33403D)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
     final Paint grid = Paint()
       ..color = Colors.white.withValues(alpha: 0.035)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
-    canvas.drawRRect(
+    canvas.save();
+    canvas.clipRRect(
       RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
-      floor,
     );
 
     for (var r = 0; r < level.size; r++) {
       for (var c = 0; c < level.size; c++) {
         final Rect rect = Rect.fromLTWH(c * cell, r * cell, cell, cell);
+        // Lantai papan catur halus supaya ada tekstur.
+        canvas.drawRect(rect, (r + c) % 2 == 0 ? floor : floorAlt);
+        canvas.drawRect(rect, grid);
         if (level.walls[r][c]) {
+          final Rect wr = rect.deflate(cell * 0.05);
           final RRect rr = RRect.fromRectAndRadius(
-            rect.deflate(cell * 0.05),
+            wr,
             Radius.circular(cell * 0.2),
           );
           canvas.drawRRect(rr, wall);
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(
-              rect.deflate(cell * 0.05),
-              Radius.circular(cell * 0.2),
-            ),
-            wallEdge..style = PaintingStyle.stroke,
+          canvas.drawRRect(rr, wallEdge);
+          // Sisi atas terang & sisi bawah gelap → kesan dinding bertebal.
+          canvas.drawLine(
+            Offset(wr.left + cell * 0.2, wr.top + 1.5),
+            Offset(wr.right - cell * 0.2, wr.top + 1.5),
+            wallTop,
+          );
+          canvas.drawLine(
+            Offset(wr.left + cell * 0.2, wr.bottom - 1.5),
+            Offset(wr.right - cell * 0.2, wr.bottom - 1.5),
+            wallShadow,
           );
         }
-        canvas.drawRect(rect, grid);
       }
     }
+    canvas.restore();
+
+    // Bingkai luar arena.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
+      Paint()
+        ..color = const Color(0xFF243230).withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
   }
 
   @override

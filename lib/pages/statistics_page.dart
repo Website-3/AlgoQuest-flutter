@@ -345,12 +345,12 @@ class _ProgressRow extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 150,
+          width: 156,
           child: Text(
             label,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ),
         const SizedBox(width: 10),

@@ -30,11 +30,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData base = ThemeData.dark();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'AlgoQuest',
-      theme: ThemeData.dark().copyWith(
+      theme: base.copyWith(
         scaffoldBackgroundColor: const Color(0xFF0B0F0F),
+        // Terapkan font kustom (Poppins) ke seluruh teks.
+        textTheme: base.textTheme.apply(fontFamily: 'Poppins'),
+        primaryTextTheme: base.primaryTextTheme.apply(fontFamily: 'Poppins'),
       ),
       home: const SplashPage(),
     );

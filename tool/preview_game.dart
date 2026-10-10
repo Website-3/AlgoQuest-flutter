@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
+import 'package:flutter_application_1/pages/statistics_page.dart';
 
 void main() {
   runApp(const PreviewApp());
@@ -77,8 +78,20 @@ class PreviewApp extends StatelessWidget {
     final bool fight = uri.queryParameters['fight'] == '1';
     final bool dlg = uri.queryParameters['dlg'] == '1';
 
+    // Pratinjau halaman Statistik: isi beberapa bintang contoh agar
+    // terlihat hidup (hanya berlaku di tool pratinjau).
+    if (mode == 'stats') {
+      MapProgress.setStars(0, 0, GameMode.adventure, 3);
+      MapProgress.setStars(0, 1, GameMode.logic, 2);
+      MapProgress.setStars(1, 0, GameMode.adventure, 1);
+      MapProgress.setStars(1, 0, GameMode.logic, 3);
+      MapProgress.setStars(2, 0, GameMode.logic, 2);
+    }
+
     final Widget page = mode == 'map'
         ? MapPreview(openDialog: dlg)
+        : mode == 'stats'
+        ? StatisticsPage(isEnglish: false, onLanguageChanged: () {})
         : mode == 'adventure'
         ? AdventurePage(
             region: region,

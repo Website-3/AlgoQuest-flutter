@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
@@ -60,6 +61,9 @@ void _resetProgress() {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
   setUp(_resetProgress);
 
   testWidgets('menampilkan elemen utama halaman petualangan', (

@@ -1,5 +1,6 @@
 import 'package:flutter_application_1/pages/map_page.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Kosongkan seluruh progres (state statis) sebelum tiap tes.
 void resetProgress() {
@@ -12,6 +13,11 @@ void resetProgress() {
 }
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   setUp(resetProgress);
 
   test('bintang tersimpan terpisah untuk tiap mode', () {
@@ -68,5 +74,30 @@ void main() {
 
     MapProgress.setStars(0, 0, GameMode.adventure, -2);
     expect(MapProgress.starsOf(0, 0, GameMode.adventure), 0);
+  });
+
+  test('progres tersimpan lalu dimuat kembali (mode terpisah)', () async {
+    MapProgress.setStars(1, 2, GameMode.adventure, 3);
+    MapProgress.setStars(1, 2, GameMode.logic, 1);
+    await MapProgress.save();
+
+    // Kosongkan memori, lalu muat dari penyimpanan.
+    MapProgress.reset();
+    expect(MapProgress.starsOf(1, 2, GameMode.adventure), 0);
+
+    await MapProgress.load();
+    expect(MapProgress.starsOf(1, 2, GameMode.adventure), 3);
+    expect(MapProgress.starsOf(1, 2, GameMode.logic), 1);
+  });
+
+  test('helpers jumlah: modeStars, maxTotalStars, readyRegions', () {
+    MapProgress.setStars(0, 0, GameMode.adventure, 2);
+    MapProgress.setStars(0, 1, GameMode.adventure, 2);
+    MapProgress.setStars(0, 2, GameMode.adventure, 2);
+
+    expect(MapProgress.modeStars(GameMode.adventure), 6);
+    expect(MapProgress.modeStars(GameMode.logic), 0);
+    expect(MapProgress.maxTotalStars(), 90);
+    expect(MapProgress.readyRegions(), 1);
   });
 }

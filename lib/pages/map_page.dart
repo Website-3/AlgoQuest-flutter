@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/app_header.dart';
 
@@ -17,7 +21,8 @@ import '../widgets/app_header.dart';
 //   3. Untuk PINDAH ke wilayah berikutnya, SEMUA level di wilayah
 //      ini harus minimal 2 bintang (dari mode mana pun, diambil
 //      yang terbaik).
-//   4. Progres hanya di memori (tidak disimpan ke HP).
+//   4. Progres disimpan ke perangkat (shared_preferences) & dimuat
+//      kembali saat aplikasi dibuka.
 
 /// Dua mode permainan untuk tiap level.
 enum GameMode { adventure, logic }
@@ -91,7 +96,7 @@ const List<GameRegion> gameRegions = <GameRegion>[
 ];
 
 // ============================================================
-// PROGRES (HANYA DI MEMORI)
+// PROGRES (DISIMPAN KE PERANGKAT)
 // ============================================================
 class MapProgress {
   MapProgress._();
@@ -102,6 +107,13 @@ class MapProgress {
   static const int maxStars = 3;
   static const int requiredStars = 2; // syarat pindah wilayah
 
+  /// Kunci penyimpanan di shared_preferences.
+  static const String _prefsKey = 'map_progress_v1';
+
+  /// Sinyal agar UI (mis. halaman Statistik) ikut menyegarkan saat
+  /// progres berubah.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   /// Bintang tiap level & tiap mode.
   /// Index = wilayah * 3 + level. 0 = belum selesai.
   static final List<int> adventureStars = List<int>.filled(totalLevels, 0);
@@ -111,6 +123,58 @@ class MapProgress {
       mode == GameMode.adventure ? adventureStars : logicStars;
 
   static int indexOf(int region, int level) => region * levelsPerRegion + level;
+
+  // ---------- Penyimpanan ----------
+
+  /// Muat progres dari perangkat. Aman dipanggil walau gagal
+  /// (mis. saat pengujian tanpa plugin).
+  static Future<void> load() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? raw = prefs.getString(_prefsKey);
+      if (raw == null) return;
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      _readInto(adventureStars, decoded['adventure']);
+      _readInto(logicStars, decoded['logic']);
+      revision.value++;
+    } catch (_) {
+      // Abaikan: progres tetap berjalan di memori.
+    }
+  }
+
+  static void _readInto(List<int> target, Object? source) {
+    if (source is! List) return;
+    for (var i = 0; i < target.length && i < source.length; i++) {
+      final Object? value = source[i];
+      if (value is int) target[i] = value.clamp(0, maxStars);
+    }
+  }
+
+  /// Simpan progres. Aman dipanggil walau gagal.
+  static Future<void> save() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _prefsKey,
+        jsonEncode(<String, Object>{
+          'adventure': adventureStars,
+          'logic': logicStars,
+        }),
+      );
+    } catch (_) {
+      // Abaikan.
+    }
+  }
+
+  /// Hapus seluruh progres dari memori (tidak menghapus penyimpanan).
+  static void reset() {
+    adventureStars.fillRange(0, adventureStars.length, 0);
+    logicStars.fillRange(0, logicStars.length, 0);
+    revision.value++;
+  }
+
+  // ---------- Baca/tulis bintang ----------
 
   /// Bintang mode tertentu.
   static int starsOf(int region, int level, GameMode mode) =>
@@ -126,6 +190,8 @@ class MapProgress {
 
   static void setStars(int region, int level, GameMode mode, int value) {
     _modeList(mode)[indexOf(region, level)] = value.clamp(0, maxStars);
+    revision.value++;
+    unawaited(save());
   }
 
   /// Semua level di wilayah ini sudah >= 2 bintang (mode mana pun)?
@@ -177,6 +243,27 @@ class MapProgress {
       total += s;
     }
     return total;
+  }
+
+  /// Total bintang untuk satu mode saja.
+  static int modeStars(GameMode mode) {
+    var total = 0;
+    for (final int s in _modeList(mode)) {
+      total += s;
+    }
+    return total;
+  }
+
+  /// Bintang maksimum seluruh peta (15 level x 3 bintang x 2 mode = 90).
+  static int maxTotalStars() => totalLevels * maxStars * 2;
+
+  /// Jumlah wilayah yang sudah siap pindah (semua level >= 2 bintang).
+  static int readyRegions() {
+    var count = 0;
+    for (var r = 0; r < regionCount; r++) {
+      if (isRegionReady(r)) count++;
+    }
+    return count;
   }
 }
 

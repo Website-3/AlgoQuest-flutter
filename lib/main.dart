@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'pages/map_page.dart';
 import 'pages/splash_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Muat progres bintang yang tersimpan sebelum UI tampil.
+  await MapProgress.load();
   runApp(const MyApp());
 }
 

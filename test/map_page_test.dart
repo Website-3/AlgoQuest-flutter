@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Kosongkan seluruh progres (state statis) sebelum tiap tes.
 void resetProgress() {
@@ -13,6 +14,9 @@ void resetProgress() {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
   setUp(resetProgress);
 
   Widget wrap({void Function(int, int, GameMode)? onStartLevel}) {

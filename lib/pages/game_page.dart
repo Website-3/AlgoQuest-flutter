@@ -117,7 +117,8 @@ class _GamePageState extends State<GamePage>
   // ----------------------------------------------------------
   void _addBlock(GameCommand command) {
     if (_running) return;
-    final bool canMerge = _blocks.isNotEmpty &&
+    final bool canMerge =
+        _blocks.isNotEmpty &&
         _blocks.last.command == command &&
         _blocks.last.count < 9;
     if (!canMerge && _blocks.length >= _level.maxBlocks) {
@@ -161,7 +162,11 @@ class _GamePageState extends State<GamePage>
   Future<void> _run() async {
     if (_running) return;
     if (_blocks.isEmpty) {
-      _toast(_en ? 'Add some command blocks first.' : 'Tambahkan blok perintah dulu.');
+      _toast(
+        _en
+            ? 'Add some command blocks first.'
+            : 'Tambahkan blok perintah dulu.',
+      );
       return;
     }
 
@@ -194,9 +199,11 @@ class _GamePageState extends State<GamePage>
     if (_engine.defeated) {
       await _showVictory(_computeStars());
     } else {
-      _toast(_en
-          ? 'Monster is not defeated yet. Try again!'
-          : 'Monster belum kalah. Coba lagi!');
+      _toast(
+        _en
+            ? 'Monster is not defeated yet. Try again!'
+            : 'Monster belum kalah. Coba lagi!',
+      );
     }
   }
 
@@ -208,8 +215,9 @@ class _GamePageState extends State<GamePage>
   }
 
   Future<void> _showVictory(int stars) async {
-    if (stars > MapProgress.starsOf(widget.region, widget.level)) {
-      MapProgress.setStars(widget.region, widget.level, stars);
+    if (stars >
+        MapProgress.starsOf(widget.region, widget.level, GameMode.logic)) {
+      MapProgress.setStars(widget.region, widget.level, GameMode.logic, stars);
     }
 
     final bool? next = await showDialog<bool>(
@@ -294,7 +302,11 @@ class _GamePageState extends State<GamePage>
   // ---------- Banner level + HP monster ----------
   Widget _levelBanner() {
     final GameRegion region = gameRegions[widget.region.clamp(0, 4)];
-    final int stars = MapProgress.starsOf(widget.region, widget.level);
+    final int stars = MapProgress.starsOf(
+      widget.region,
+      widget.level,
+      GameMode.logic,
+    );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -310,7 +322,9 @@ class _GamePageState extends State<GamePage>
                 decoration: BoxDecoration(
                   color: region.color.withValues(alpha: 0.16),
                   shape: BoxShape.circle,
-                  border: Border.all(color: region.color.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: region.color.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Icon(region.icon, color: region.color, size: 18),
               ),
@@ -377,9 +391,7 @@ class _GamePageState extends State<GamePage>
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: _level.enemyHp == 0
-                  ? 0
-                  : _engine.enemyHp / _level.enemyHp,
+              value: _level.enemyHp == 0 ? 0 : _engine.enemyHp / _level.enemyHp,
               minHeight: 9,
               backgroundColor: _kCardSoft,
               valueColor: const AlwaysStoppedAnimation<Color>(_kPink),
@@ -408,8 +420,10 @@ class _GamePageState extends State<GamePage>
   Widget _mazeArena() {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final double side =
-            math.min(constraints.maxWidth, constraints.maxHeight);
+        final double side = math.min(
+          constraints.maxWidth,
+          constraints.maxHeight,
+        );
         return Center(
           child: SizedBox(
             width: side,
@@ -501,10 +515,7 @@ class _GamePageState extends State<GamePage>
       p = (1 - (t - 0.6) / 0.4).clamp(0.0, 1.0);
     }
     final double amount = p * cell * 0.42;
-    return Offset(
-      kDirCol[_engine.dir] * amount,
-      kDirRow[_engine.dir] * amount,
-    );
+    return Offset(kDirCol[_engine.dir] * amount, kDirRow[_engine.dir] * amount);
   }
 
   /// Monster terguncang saat terkena serangan.
@@ -639,8 +650,9 @@ class _GamePageState extends State<GamePage>
                 ? null
                 : <BoxShadow>[
                     BoxShadow(
-                      color: (flash > 0 ? Colors.white : _kPink)
-                          .withValues(alpha: flash > 0 ? 0.9 : 0.5),
+                      color: (flash > 0 ? Colors.white : _kPink).withValues(
+                        alpha: flash > 0 ? 0.9 : 0.5,
+                      ),
                       blurRadius: flash > 0 ? 20 : 12,
                     ),
                   ],
@@ -678,8 +690,7 @@ class _GamePageState extends State<GamePage>
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: _kCardSoft,
                   borderRadius: BorderRadius.circular(8),
@@ -695,14 +706,12 @@ class _GamePageState extends State<GamePage>
               ),
               const SizedBox(width: 4),
               IconButton(
-                onPressed:
-                    (_running || _blocks.isEmpty) ? null : _clearBlocks,
+                onPressed: (_running || _blocks.isEmpty) ? null : _clearBlocks,
                 icon: const Icon(Icons.delete_outline, size: 18),
                 color: _kMuted,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 tooltip: _en ? 'Clear' : 'Hapus',
               ),
             ],
@@ -723,12 +732,7 @@ class _GamePageState extends State<GamePage>
 
   Widget _dropZone() {
     return CustomPaint(
-      painter: _DashedBorderPainter(
-        color: _kLine,
-        radius: 12,
-        dash: 6,
-        gap: 5,
-      ),
+      painter: _DashedBorderPainter(color: _kLine, radius: 12, dash: 6, gap: 5),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -748,10 +752,7 @@ class _GamePageState extends State<GamePage>
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: List<Widget>.generate(
-        _blocks.length,
-        (int i) => _blockPill(i),
-      ),
+      children: List<Widget>.generate(_blocks.length, (int i) => _blockPill(i)),
     );
   }
 
@@ -783,8 +784,11 @@ class _GamePageState extends State<GamePage>
           const SizedBox(width: 6),
           GestureDetector(
             onTap: () => _decBlock(index),
-            child: const Icon(Icons.remove_circle_outline,
-                size: 16, color: _kMuted),
+            child: const Icon(
+              Icons.remove_circle_outline,
+              size: 16,
+              color: _kMuted,
+            ),
           ),
           const SizedBox(width: 2),
           GestureDetector(
@@ -798,8 +802,7 @@ class _GamePageState extends State<GamePage>
 
   Widget _statusLine() {
     final StepOutcome? last = _engine.last;
-    final bool warn =
-        last == StepOutcome.blocked || last == StepOutcome.missed;
+    final bool warn = last == StepOutcome.blocked || last == StepOutcome.missed;
     return Row(
       children: <Widget>[
         Icon(
@@ -811,10 +814,7 @@ class _GamePageState extends State<GamePage>
         Expanded(
           child: Text(
             _statusText,
-            style: TextStyle(
-              color: warn ? _kOrange : _kMuted,
-              fontSize: 12.5,
-            ),
+            style: TextStyle(color: warn ? _kOrange : _kMuted, fontSize: 12.5),
           ),
         ),
         Text(
@@ -1018,8 +1018,11 @@ class _GamePageState extends State<GamePage>
                 color: _kGreen.withValues(alpha: 0.16),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.emoji_events_rounded,
-                  color: _kGreen, size: 34),
+              child: const Icon(
+                Icons.emoji_events_rounded,
+                color: _kGreen,
+                size: 34,
+              ),
             ),
             const SizedBox(height: 14),
             Text(
@@ -1116,8 +1119,7 @@ class _GamePageState extends State<GamePage>
                 color: _kCyan.withValues(alpha: 0.16),
                 shape: BoxShape.circle,
               ),
-              child:
-                  const Icon(Icons.quiz_rounded, color: _kCyan, size: 34),
+              child: const Icon(Icons.quiz_rounded, color: _kCyan, size: 34),
             ),
             const SizedBox(height: 14),
             Text(
@@ -1476,10 +1478,7 @@ class _DashedBorderPainter extends CustomPainter {
     for (final metric in path.computeMetrics()) {
       var distance = 0.0;
       while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dash),
-          paint,
-        );
+        canvas.drawPath(metric.extractPath(distance, distance + dash), paint);
         distance += dash + gap;
       }
     }

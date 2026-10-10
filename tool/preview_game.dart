@@ -5,9 +5,61 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
+import 'package:flutter_application_1/pages/map_page.dart';
 
 void main() {
   runApp(const PreviewApp());
+}
+
+/// Pratinjau alur Peta -> pilih mode -> halaman permainan.
+class MapPreview extends StatefulWidget {
+  const MapPreview({super.key, this.openDialog = false});
+
+  final bool openDialog;
+
+  @override
+  State<MapPreview> createState() => _MapPreviewState();
+}
+
+class _MapPreviewState extends State<MapPreview> {
+  int? _region;
+  int? _level;
+  GameMode _mode = GameMode.logic;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_region == null) {
+      return MapPage(
+        isEnglish: false,
+        onLanguageChanged: () {},
+        debugOpenDialog: widget.openDialog,
+        onStartLevel: (region, level, mode) {
+          setState(() {
+            _region = region;
+            _level = level;
+            _mode = mode;
+          });
+        },
+      );
+    }
+    return _mode == GameMode.adventure
+        ? AdventurePage(
+            region: _region!,
+            level: _level!,
+            isEnglish: false,
+            onLanguageChanged: () {},
+            onBack: () => setState(() => _region = null),
+            onFinished: (_) => setState(() => _region = null),
+          )
+        : GamePage(
+            region: _region!,
+            level: _level!,
+            isEnglish: false,
+            onLanguageChanged: () {},
+            onBack: () => setState(() => _region = null),
+            onFinished: (_) => setState(() => _region = null),
+          );
+  }
 }
 
 class PreviewApp extends StatelessWidget {
@@ -22,8 +74,12 @@ class PreviewApp extends StatelessWidget {
         int.tryParse(uri.queryParameters['l'] ?? '')?.clamp(0, 2) ?? 0;
     final double? fx = double.tryParse(uri.queryParameters['fx'] ?? '');
     final String mode = uri.queryParameters['mode'] ?? 'logic';
+    final bool fight = uri.queryParameters['fight'] == '1';
+    final bool dlg = uri.queryParameters['dlg'] == '1';
 
-    final Widget page = mode == 'adventure'
+    final Widget page = mode == 'map'
+        ? MapPreview(openDialog: dlg)
+        : mode == 'adventure'
         ? AdventurePage(
             region: region,
             level: level,
@@ -31,6 +87,7 @@ class PreviewApp extends StatelessWidget {
             onLanguageChanged: () {},
             onBack: () {},
             onFinished: (_) {},
+            debugStartFight: fight,
           )
         : GamePage(
             region: region,

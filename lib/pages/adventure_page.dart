@@ -5,9 +5,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../services/adventure_service.dart';
+import '../services/combat_service.dart';
 import '../services/game_service.dart';
+import '../widgets/action_button.dart';
 import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
+import '../widgets/hp_bar.dart';
 import '../widgets/minimap.dart';
 import '../widgets/virtual_joystick.dart';
 import 'map_page.dart';
@@ -26,12 +29,16 @@ const Color _kCard = Color(0xFF141A19);
 const Color _kLine = Color(0xFF2A3432);
 const Color _kCyan = Color(0xFF42CFFF);
 const Color _kPink = Color(0xFFFF5E7E);
+const Color _kYellow = Color(0xFFFFB21A);
 const Color _kRed = Color(0xFFB02A32);
 const Color _kText = Color(0xFFDDE7E9);
 const Color _kMuted = Color(0xFF8A9795);
 
 /// Berapa sel labirin yang kira-kira terlihat di layar.
 const double _visibleCells = 6.0;
+
+/// Jarak minimal ke monster agar tombol TEMPUR muncul.
+const double _fightRange = 1.75;
 
 class AdventurePage extends StatefulWidget {
   final int region;
@@ -43,6 +50,12 @@ class AdventurePage extends StatefulWidget {
   /// Dipanggil saat pemain pulang ke peta (skor dihitung tahap nanti).
   final void Function(int stars)? onFinished;
 
+  /// Khusus uji/preview: pakai labirin ini alih-alih katalog.
+  final MazeLevel? debugLevel;
+
+  /// Khusus uji/preview: langsung mulai tempur di samping monster.
+  final bool debugStartFight;
+
   const AdventurePage({
     super.key,
     required this.region,
@@ -51,6 +64,8 @@ class AdventurePage extends StatefulWidget {
     required this.onLanguageChanged,
     required this.onBack,
     this.onFinished,
+    this.debugLevel,
+    this.debugStartFight = false,
   });
 
   @override
@@ -61,6 +76,7 @@ class _AdventurePageState extends State<AdventurePage>
     with SingleTickerProviderStateMixin {
   late MazeLevel _level;
   late AdventureService _service;
+  late CombatService _combat;
   late Ticker _ticker;
   Duration _lastElapsed = Duration.zero;
 
@@ -68,6 +84,9 @@ class _AdventurePageState extends State<AdventurePage>
   final Set<LogicalKeyboardKey> _keys = <LogicalKeyboardKey>{};
   Offset _kbInput = Offset.zero;
   Offset _joyInput = Offset.zero;
+
+  /// Cegah pemberian bintang dua kali untuk satu kemenangan.
+  bool _rewarded = false;
 
   bool get _en => widget.isEnglish;
 
@@ -87,9 +106,16 @@ class _AdventurePageState extends State<AdventurePage>
   }
 
   void _load() {
-    _level = MazeCatalog.level(widget.region, widget.level);
+    _level =
+        widget.debugLevel ?? MazeCatalog.level(widget.region, widget.level);
     _service = AdventureService(_level);
+    _combat = CombatService.forLevel(widget.region, widget.level);
     _lastElapsed = Duration.zero;
+    _rewarded = false;
+    if (widget.debugStartFight) {
+      _service.jumpTo(_level.monster.col + 0.5, _level.monster.row + 0.5 - 1.0);
+      _combat.startFight();
+    }
   }
 
   @override
@@ -100,10 +126,40 @@ class _AdventurePageState extends State<AdventurePage>
   }
 
   void _onTick(Duration elapsed) {
-    final double dt =
-        (elapsed - _lastElapsed).inMicroseconds / 1000000.0;
+    final double dt = (elapsed - _lastElapsed).inMicroseconds / 1000000.0;
     _lastElapsed = elapsed;
-    _service.update(dt.clamp(0.0, 0.05));
+    final double s = dt.clamp(0.0, 0.05);
+    _service.update(s);
+    if (_combat.isFighting) {
+      _service.setInput(Offset.zero); // pemain diam saat bertarung
+      _combat.update(s);
+      if (!_rewarded && _combat.phase == FightPhase.won) {
+        _rewarded = true;
+        _awardVictory();
+      }
+    }
+  }
+
+  /// Bintang dari sisa HP pemain saat menang (makin utuh makin banyak).
+  int _victoryStars() {
+    final double ratio = _combat.playerHpRatio;
+    if (ratio >= 0.66) return 3;
+    if (ratio >= 0.33) return 2;
+    return 1;
+  }
+
+  /// Simpan bintang mode Petualangan untuk level ini.
+  void _awardVictory() {
+    final int stars = _victoryStars();
+    if (stars >
+        MapProgress.starsOf(widget.region, widget.level, GameMode.adventure)) {
+      MapProgress.setStars(
+        widget.region,
+        widget.level,
+        GameMode.adventure,
+        stars,
+      );
+    }
   }
 
   // ----------------------------------------------------------
@@ -146,6 +202,10 @@ class _AdventurePageState extends State<AdventurePage>
   }
 
   void _applyInput() {
+    if (_combat.isFighting) {
+      _service.setInput(Offset.zero);
+      return;
+    }
     _service.setInput(_kbInput.distance > 0 ? _kbInput : _joyInput);
   }
 
@@ -289,7 +349,7 @@ class _AdventurePageState extends State<AdventurePage>
               border: Border.all(color: _kLine),
             ),
             child: ListenableBuilder(
-              listenable: _service,
+              listenable: Listenable.merge(<Listenable>[_service, _combat]),
               builder: (BuildContext context, _) {
                 final double cellPx = math.min(vw, vh) / _visibleCells;
                 final double worldW = _level.size * cellPx;
@@ -302,6 +362,16 @@ class _AdventurePageState extends State<AdventurePage>
                 camX = camX.clamp(0.0, math.max(0.0, worldW - vw));
                 camY = camY.clamp(0.0, math.max(0.0, worldH - vh));
                 final Offset camera = Offset(camX, camY);
+
+                final bool fighting = _combat.isFighting;
+                final bool showResult =
+                    _combat.phase == FightPhase.won ||
+                    _combat.phase == FightPhase.lost;
+                final double mDist = _monsterDist;
+                final bool inFightRange =
+                    _combat.phase == FightPhase.exploring &&
+                    !_combat.monsterDefeated &&
+                    mDist <= _fightRange;
 
                 return Stack(
                   children: <Widget>[
@@ -317,31 +387,132 @@ class _AdventurePageState extends State<AdventurePage>
                     ),
                     // Pemain + monster
                     Positioned.fill(child: _entitiesLayer(cellPx, camera)),
-                    // Minimap (pojok kiri atas)
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      child: Minimap(service: _service),
-                    ),
-                    // Petunjuk
-                    Positioned(
-                      left: 90,
-                      right: 90,
-                      top: 12,
-                      child: Center(child: _hintChip()),
-                    ),
-                    // Joystick
-                    Positioned(
-                      left: 10,
-                      bottom: 10,
-                      child: VirtualJoystick(
-                        size: 118,
-                        onChanged: (Offset v) {
-                          setState(() => _joyInput = v);
-                          _applyInput();
-                        },
+                    // Efek tempur (tebasan, HINDAR, teleport isyarat)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _CombatFxPainter(
+                            combat: _combat,
+                            playerPos: Offset(
+                              _service.x * cellPx - camera.dx,
+                              _service.y * cellPx - camera.dy,
+                            ),
+                            monsterPos: Offset(
+                              (_level.monster.col + 0.5) * cellPx - camera.dx,
+                              (_level.monster.row + 0.5) * cellPx - camera.dy,
+                            ),
+                            cellPx: cellPx,
+                          ),
+                        ),
                       ),
                     ),
+                    // Minimap (pojok kiri atas) — tersembunyi saat tempur
+                    if (!fighting && !showResult)
+                      Positioned(
+                        left: 10,
+                        top: 10,
+                        child: Minimap(
+                          service: _service,
+                          showMonster: !_combat.monsterDefeated,
+                        ),
+                      ),
+                    // Petunjuk / bilah HP
+                    if (fighting)
+                      Positioned(
+                        top: 10,
+                        left: 12,
+                        right: 12,
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: HpBar(
+                                label: _en ? 'YOU' : 'KAMU',
+                                icon: Icons.sentiment_satisfied,
+                                ratio: _combat.playerHpRatio,
+                                color: _kCyan,
+                                valueText:
+                                    '${_combat.playerHp.round()}/${_combat.playerMaxHp}',
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: HpBar(
+                                label: _en ? 'MONSTER' : 'MONSTER',
+                                icon: Icons.pest_control,
+                                ratio: _combat.monsterHpRatio,
+                                color: _kRed,
+                                valueText:
+                                    '${_combat.monsterHp.round()}/${_combat.monsterMaxHp}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (!showResult)
+                      Positioned(
+                        left: 90,
+                        right: 90,
+                        top: 12,
+                        child: Center(child: _hintChip()),
+                      ),
+                    // Tombol TEMPUR (muncul saat dekat monster)
+                    if (inFightRange)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 18,
+                        child: Center(child: _fightButton()),
+                      ),
+                    // Joystick (disembunyikan saat tempur)
+                    if (!fighting && !showResult)
+                      Positioned(
+                        left: 10,
+                        bottom: 10,
+                        child: VirtualJoystick(
+                          size: 118,
+                          onChanged: (Offset v) {
+                            setState(() => _joyInput = v);
+                            _applyInput();
+                          },
+                        ),
+                      ),
+                    // Tombol aksi saat tempur
+                    if (fighting)
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 12,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: <Widget>[
+                            ActionButton(
+                              icon: Icons.sports_kabaddi,
+                              label: _en ? 'ATTACK' : 'SERANG',
+                              color: _kPink,
+                              onTap: _combat.attack,
+                              enabled: !_combat.attacking,
+                            ),
+                            ActionButton(
+                              icon: Icons.auto_awesome,
+                              label: _en ? 'SKILL' : 'SKILL',
+                              color: _kCyan,
+                              onTap: _combat.skill,
+                              cooldown: _combat.skillCdRatio,
+                              enabled: _combat.skillReady,
+                            ),
+                            ActionButton(
+                              icon: Icons.shield,
+                              label: _en ? 'DODGE' : 'DODGE',
+                              color: const Color(0xFF35D07F),
+                              onTap: _combat.dodge,
+                              cooldown: _combat.dodgeCdRatio,
+                              enabled: _combat.dodgeReady,
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Panel hasil (menang/kalah)
+                    if (showResult) Positioned.fill(child: _resultPanel()),
                   ],
                 );
               },
@@ -356,41 +527,73 @@ class _AdventurePageState extends State<AdventurePage>
     final double pcx = _service.x * cellPx - camera.dx;
     final double pcy = _service.y * cellPx - camera.dy;
     final Pos m = _level.monster;
+    final double mcx = (m.col + 0.5) * cellPx - camera.dx;
+    final double mcy = (m.row + 0.5) * cellPx - camera.dy;
+
+    // Geser pemain saat menyerang & monster saat menerkam.
+    Offset playerLunge = Offset.zero;
+    Offset monsterLunge = Offset.zero;
+    if (_combat.isFighting || _combat.phase == FightPhase.won) {
+      Offset dir = Offset(mcx - pcx, mcy - pcy);
+      final double len = dir.distance;
+      if (len < 0.001) {
+        dir = const Offset(1, 0);
+      } else {
+        dir = dir / len;
+      }
+      if (_combat.attackT > 0) {
+        playerLunge =
+            dir * (math.sin(_combat.attackT * math.pi) * cellPx * 0.3);
+      }
+      if (_combat.monsterLungeT > 0) {
+        monsterLunge =
+            (-dir) *
+            (math.sin(_combat.monsterLungeT * math.pi) * cellPx * 0.32);
+      }
+      if (_combat.shakeT > 0) {
+        monsterLunge += Offset(
+          math.sin(_combat.shakeT * 90) * 1.6,
+          math.cos(_combat.shakeT * 70) * 1.6,
+        );
+      }
+    }
 
     return Stack(
       children: <Widget>[
         // Karakter pemain
         Positioned(
-          left: pcx - cellPx / 2,
-          top: pcy - cellPx / 2,
+          left: pcx + playerLunge.dx - cellPx / 2,
+          top: pcy + playerLunge.dy - cellPx / 2,
           width: cellPx,
           height: cellPx,
           child: HeroToken(size: cellPx, facing: _service.facing),
         ),
-        // Monster (muncul bila pernah terlihat; redup bila tak lagi
-        // terlihat langsung).
-        if (_service.isSeen(m.row, m.col))
+        // Monster (muncul bila pernah terlihat & belum kalah; redup bila
+        // tak lagi terlihat langsung).
+        if (_service.isSeen(m.row, m.col) && !_combat.monsterDefeated)
           Positioned(
-            left: (m.col + 0.05) * cellPx - camera.dx,
-            top: (m.row + 0.05) * cellPx - camera.dy,
+            left: mcx + monsterLunge.dx - cellPx * 0.45,
+            top: mcy + monsterLunge.dy - cellPx * 0.45,
             width: cellPx * 0.9,
             height: cellPx * 0.9,
             child: Opacity(
               opacity: _monsterOpacity(),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _kRed,
+                  color: _combat.flashT > 0 ? Colors.white : _kRed,
                   borderRadius: BorderRadius.circular(11),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
-                      color: _kPink.withValues(alpha: 0.55),
+                      color: _combat.flashT > 0
+                          ? Colors.white
+                          : _kPink.withValues(alpha: 0.55),
                       blurRadius: 16,
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.pest_control_rounded,
-                  color: Colors.white,
+                  color: Colors.redAccent,
                   size: 26,
                 ),
               ),
@@ -405,6 +608,168 @@ class _AdventurePageState extends State<AdventurePage>
     final double dy = (_level.monster.row + 0.5) - _service.y;
     final double v = math.sqrt(dx * dx + dy * dy);
     return v <= AdventureService.visRadius ? 1.0 : 0.45;
+  }
+
+  double get _monsterDist {
+    final double dx = (_level.monster.col + 0.5) - _service.x;
+    final double dy = (_level.monster.row + 0.5) - _service.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  // ---------- Tombol TEMPUR ----------
+  Widget _fightButton() {
+    return GestureDetector(
+      onTap: _combat.startFight,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+        decoration: BoxDecoration(
+          color: _kPink,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white24),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: _kPink.withValues(alpha: 0.6),
+              blurRadius: 22,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.sports_kabaddi, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              _en ? 'FIGHT!' : 'TEMPUR!',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------- Panel hasil (menang / kalah) ----------
+  Widget _resultPanel() {
+    final bool won = _combat.phase == FightPhase.won;
+    return Container(
+      color: Colors.black.withValues(alpha: 0.62),
+      alignment: Alignment.center,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 34),
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+        decoration: BoxDecoration(
+          color: _kCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: won ? _kYellow.withValues(alpha: 0.6) : _kPink,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              won ? Icons.emoji_events : Icons.sentiment_dissatisfied,
+              color: won ? _kYellow : _kPink,
+              size: 40,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              won ? (_en ? 'VICTORY!' : 'MENANG!') : (_en ? 'DEFEAT' : 'KALAH'),
+              style: TextStyle(
+                color: won ? _kYellow : _kPink,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              won
+                  ? (_en
+                        ? 'Monster defeated. Great logic!'
+                        : 'Monster dikalahkan. Logikamu hebat!')
+                  : (_en
+                        ? 'Your hero fell. Try again!'
+                        : 'Karaktermu tumbang. Coba lagi!'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _kMuted, fontSize: 12),
+            ),
+            if (won) ...<Widget>[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  for (var i = 0; i < 3; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(
+                        i < _victoryStars()
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        color: _kYellow,
+                        size: 30,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 18),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      if (won && widget.onFinished != null) {
+                        widget.onFinished!(_victoryStars());
+                      } else {
+                        widget.onBack();
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _kText,
+                      side: const BorderSide(color: _kLine),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      _en ? 'TO MAP' : 'KE PETA',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: won
+                        ? _combat.continueExploring
+                        : _combat.rematch,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: won ? _kCyan : _kPink,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      won
+                          ? (_en ? 'CONTINUE' : 'LANJUT')
+                          : (_en ? 'RETRY' : 'COBA LAGI'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _hintChip() {
@@ -476,18 +841,12 @@ class _MazeWorldPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final Paint hiddenPaint = Paint()..color = _hidden;
-    final Paint dimPaint = Paint()
-      ..color = _dimOverlay.withValues(alpha: 0.55);
+    final Paint dimPaint = Paint()..color = _dimOverlay.withValues(alpha: 0.55);
 
     final double vr = AdventureService.visRadius;
     for (int r = 0; r < level.size; r++) {
       for (int c = 0; c < level.size; c++) {
-        final Rect cell = Rect.fromLTWH(
-          c * cellPx,
-          r * cellPx,
-          cellPx,
-          cellPx,
-        );
+        final Rect cell = Rect.fromLTWH(c * cellPx, r * cellPx, cellPx, cellPx);
 
         // Fog of war: sel belum pernah terlihat = gelap pekat.
         if (!service.isSeen(r, c)) {
@@ -529,9 +888,7 @@ class _MazeWorldPainter extends CustomPainter {
           _dimOverlay.withValues(alpha: 0.6),
         ],
         stops: const <double>[0.55, 1.0],
-      ).createShader(
-        Rect.fromCircle(center: pc, radius: vr * cellPx),
-      );
+      ).createShader(Rect.fromCircle(center: pc, radius: vr * cellPx));
     canvas.drawCircle(pc, vr * cellPx, glow);
 
     canvas.restore();
@@ -543,4 +900,117 @@ class _MazeWorldPainter extends CustomPainter {
       oldDelegate.service != service ||
       oldDelegate.cellPx != cellPx ||
       oldDelegate.camera != camera;
+}
+
+// ------------------------------------------------------------
+// PELUKIS EFEK TEMPUR
+// ------------------------------------------------------------
+class _CombatFxPainter extends CustomPainter {
+  const _CombatFxPainter({
+    required this.combat,
+    required this.playerPos,
+    required this.monsterPos,
+    required this.cellPx,
+  });
+
+  final CombatService combat;
+  final Offset playerPos;
+  final Offset monsterPos;
+  final double cellPx;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Perisai saat mengelak.
+    if (combat.dodgeWindow > 0) {
+      canvas.drawCircle(
+        playerPos,
+        cellPx * 0.62,
+        Paint()
+          ..color = const Color(0xFF42CFFF).withValues(alpha: 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+    }
+
+    if (!combat.isFighting) return;
+
+    // Isyarat monster (tanda seru + cincin) sebelum menerkam.
+    if (combat.monsterTelegraphing) {
+      final double p = 1 - (combat.teleTimer / CombatService.teleDuration);
+      final double blink = (math.sin(combat.teleTimer * 40).abs() * 0.5 + 0.5);
+      canvas.drawCircle(
+        monsterPos,
+        cellPx * (0.45 + p * 0.5),
+        Paint()
+          ..color = const Color(0xFFFF5E5E)
+              .withValues(alpha: 0.25 + blink * 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+      final TextPainter tp = TextPainter(
+        text: TextSpan(
+          text: '!',
+          style: TextStyle(
+            color: const Color(0xFFFF5E5E).withValues(alpha: 0.4 + blink * 0.6),
+            fontSize: cellPx * 0.7,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, monsterPos + Offset(-tp.width / 2, -cellPx * 1.15));
+    }
+
+    // Tebasan saat pemain menyerang (0.45..0.75 dari animasi).
+    if (combat.attackT > 0) {
+      final double s = (combat.attackT - 0.45) / 0.3;
+      if (s > 0 && s < 1) {
+        final Color c = combat.isSkill
+            ? const Color(0xFF42CFFF)
+            : const Color(0xFFFFB21A);
+        final double a0 = math.atan2(
+          playerPos.dy - monsterPos.dy,
+          playerPos.dx - monsterPos.dx,
+        );
+        canvas.drawArc(
+          Rect.fromCircle(
+            center: monsterPos,
+            radius: cellPx * (0.8 + s * 0.45),
+          ),
+          a0 - 1.5 + s * 3.0,
+          2.2 - s * 1.9,
+          false,
+          Paint()
+            ..color = c.withValues(alpha: 1 - s)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 6 * (1 - s * 0.4)
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
+
+    // Teks melayang (damage / HINDAR!).
+    for (final FloatText t in combat.texts) {
+      final Offset base = t.atMonster ? monsterPos : playerPos;
+      final double yOff = -t.t * cellPx * 1.2;
+      final TextPainter tp = TextPainter(
+        text: TextSpan(
+          text: t.text,
+          style: TextStyle(
+            color: t.color.withValues(alpha: (1 - t.t).clamp(0.0, 1.0)),
+            fontSize: cellPx * 0.42,
+            fontWeight: FontWeight.bold,
+            shadows: const <Shadow>[
+              Shadow(color: Colors.black87, blurRadius: 3),
+            ],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, base + Offset(-tp.width / 2, -cellPx * 0.35 + yOff));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CombatFxPainter oldDelegate) => true;
 }

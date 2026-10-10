@@ -5,17 +5,22 @@ import '../widgets/app_header.dart';
 // ============================================================
 // MAP PAGE — PETA DUNIA
 // ============================================================
-// 5 wilayah x 3 level = 15 level.
+// 5 wilayah x 3 level = 15 level, tiap level punya 2 mode:
+//   - 🧭 Petualangan  (jelajah + tempur real-time)
+//   - 🧩 Arena Logika (susun blok perintah)
+// Bintang dihitung TERPISAH per mode.
 //
 // ATURAN PROGRES:
 //   1. Wilayah 1 terbuka dari awal.
 //   2. Di dalam 1 wilayah, level berikutnya terbuka begitu level
 //      sebelumnya selesai (bintang 1 pun cukup untuk membuka).
 //   3. Untuk PINDAH ke wilayah berikutnya, SEMUA level di wilayah
-//      ini harus minimal 2 bintang.
-//   4. Dapat 1 bintang -> wajib mengulang dulu agar bintang naik,
-//      baru wilayah berikutnya terbuka.
-//   5. Progres hanya di memori (tidak disimpan ke HP).
+//      ini harus minimal 2 bintang (dari mode mana pun, diambil
+//      yang terbaik).
+//   4. Progres hanya di memori (tidak disimpan ke HP).
+
+/// Dua mode permainan untuk tiap level.
+enum GameMode { adventure, logic }
 
 // ============================================================
 // DATA WILAYAH
@@ -97,21 +102,36 @@ class MapProgress {
   static const int maxStars = 3;
   static const int requiredStars = 2; // syarat pindah wilayah
 
-  /// Bintang tiap level. Index = wilayah * 3 + level. 0 = belum selesai.
-  static final List<int> stars = List<int>.filled(totalLevels, 0);
+  /// Bintang tiap level & tiap mode.
+  /// Index = wilayah * 3 + level. 0 = belum selesai.
+  static final List<int> adventureStars = List<int>.filled(totalLevels, 0);
+  static final List<int> logicStars = List<int>.filled(totalLevels, 0);
+
+  static List<int> _modeList(GameMode mode) =>
+      mode == GameMode.adventure ? adventureStars : logicStars;
 
   static int indexOf(int region, int level) => region * levelsPerRegion + level;
 
-  static int starsOf(int region, int level) => stars[indexOf(region, level)];
+  /// Bintang mode tertentu.
+  static int starsOf(int region, int level, GameMode mode) =>
+      _modeList(mode)[indexOf(region, level)];
 
-  static void setStars(int region, int level, int value) {
-    stars[indexOf(region, level)] = value.clamp(0, maxStars);
+  /// Bintang terbaik dari kedua mode (dipakai untuk membuka progres).
+  static int bestStarsOf(int region, int level) {
+    final int i = indexOf(region, level);
+    return adventureStars[i] > logicStars[i]
+        ? adventureStars[i]
+        : logicStars[i];
   }
 
-  /// Semua level di wilayah ini sudah >= 2 bintang?
+  static void setStars(int region, int level, GameMode mode, int value) {
+    _modeList(mode)[indexOf(region, level)] = value.clamp(0, maxStars);
+  }
+
+  /// Semua level di wilayah ini sudah >= 2 bintang (mode mana pun)?
   static bool isRegionReady(int region) {
     for (var level = 0; level < levelsPerRegion; level++) {
-      if (starsOf(region, level) < requiredStars) return false;
+      if (bestStarsOf(region, level) < requiredStars) return false;
     }
     return true;
   }
@@ -126,21 +146,38 @@ class MapProgress {
   static bool isLevelUnlocked(int region, int level) {
     if (!isRegionUnlocked(region)) return false;
     if (level == 0) return true;
-    return starsOf(region, level - 1) >= 1;
+    return bestStarsOf(region, level - 1) >= 1;
   }
 
-  /// Total bintang dalam 1 wilayah (maks 9).
+  /// Total bintang dalam 1 wilayah dari kedua mode (maks 18).
   static int regionStars(int region) {
     var total = 0;
     for (var level = 0; level < levelsPerRegion; level++) {
-      total += starsOf(region, level);
+      total +=
+          starsOf(region, level, GameMode.adventure) +
+          starsOf(region, level, GameMode.logic);
     }
     return total;
   }
 
-  static int completedLevels() => stars.where((s) => s > 0).length;
+  static int completedLevels() {
+    var count = 0;
+    for (var i = 0; i < totalLevels; i++) {
+      if (adventureStars[i] > 0 || logicStars[i] > 0) count++;
+    }
+    return count;
+  }
 
-  static int totalStars() => stars.fold<int>(0, (sum, s) => sum + s);
+  static int totalStars() {
+    var total = 0;
+    for (final int s in adventureStars) {
+      total += s;
+    }
+    for (final int s in logicStars) {
+      total += s;
+    }
+    return total;
+  }
 }
 
 // ============================================================
@@ -151,9 +188,13 @@ class MapPage extends StatefulWidget {
   final VoidCallback onLanguageChanged;
   final VoidCallback? onBack;
 
-  /// Bila diisi, mengetuk level langsung membuka halaman permainan
-  /// (GamePage). Bila null, level membuka dialog simulasi bintang.
-  final void Function(int region, int level)? onStartLevel;
+  /// Bila diisi, mengetuk level membuka dialog pilih mode
+  /// (Petualangan / Arena Logika), lalu memanggil ini. Bila null,
+  /// level langsung mensimulasikan kemenangan (3 bintang).
+  final void Function(int region, int level, GameMode mode)? onStartLevel;
+
+  /// Khusus uji/preview: buka otomatis dialog mode level ini saat dimuat.
+  final bool debugOpenDialog;
 
   const MapPage({
     super.key,
@@ -161,6 +202,7 @@ class MapPage extends StatefulWidget {
     required this.onLanguageChanged,
     this.onBack,
     this.onStartLevel,
+    this.debugOpenDialog = false,
   });
 
   @override
@@ -170,59 +212,64 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   bool get _en => widget.isEnglish;
 
-  // ----------------------------------------------------------
-  // Ketuk level yang terbuka -> dialog simulasi bintang
-  // ----------------------------------------------------------
-  Future<void> _openLevel(int region, int level) async {
-    // Mode permainan sesungguhnya -> buka GamePage.
-    if (widget.onStartLevel != null) {
-      widget.onStartLevel!(region, level);
-      return;
-    }
-
-    final GameRegion r = gameRegions[region];
-    final int before = MapProgress.starsOf(region, level);
-    final bool wasReady = MapProgress.isRegionReady(region);
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => _levelDialog(ctx, region, level, r, before),
-    );
-
-    if (!mounted) return;
-
-    final bool nowReady = MapProgress.isRegionReady(region);
-    setState(() {});
-
-    if (!wasReady && nowReady) {
-      final String msg = region < gameRegions.length - 1
-          ? (_en
-                ? 'Region ${region + 2} unlocked!'
-                : 'Wilayah ${region + 2} terbuka!')
-          : (_en
-                ? 'All regions cleared - you finished AlgoQuest!'
-                : 'Semua wilayah selesai - kamu menuntaskan AlgoQuest!');
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF164653),
-            content: Text(msg),
-          ),
-        );
+  @override
+  void initState() {
+    super.initState();
+    if (widget.debugOpenDialog) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openLevel(0, 0);
+      });
     }
   }
 
   // ----------------------------------------------------------
-  // DIALOG LEVEL
+  // Ketuk level yang terbuka -> dialog pilih mode
   // ----------------------------------------------------------
-  Widget _levelDialog(
-    BuildContext ctx,
-    int region,
-    int level,
-    GameRegion r,
-    int before,
-  ) {
+  Future<void> _openLevel(int region, int level) async {
+    final GameRegion r = gameRegions[region];
+    final bool wasReady = MapProgress.isRegionReady(region);
+
+    final GameMode? mode = await showDialog<GameMode>(
+      context: context,
+      builder: (ctx) => _modeDialog(ctx, region, level, r),
+    );
+
+    if (!mounted || mode == null) return;
+
+    // Host sebenarnya -> buka halaman mode tersebut.
+    if (widget.onStartLevel != null) {
+      widget.onStartLevel!(region, level, mode);
+      return;
+    }
+
+    // Tanpa host (mode demo) -> simulasikan kemenangan 3 bintang.
+    MapProgress.setStars(region, level, mode, 3);
+    setState(() {});
+    _announceRegion(region, wasReady);
+  }
+
+  /// Kabari bila wilayah berikutnya baru terbuka.
+  void _announceRegion(int region, bool wasReady) {
+    final bool nowReady = MapProgress.isRegionReady(region);
+    if (wasReady || !nowReady) return;
+    final String msg = region < gameRegions.length - 1
+        ? (_en
+              ? 'Region ${region + 2} unlocked!'
+              : 'Wilayah ${region + 2} terbuka!')
+        : (_en
+              ? 'All regions cleared - you finished AlgoQuest!'
+              : 'Semua wilayah selesai - kamu menuntaskan AlgoQuest!');
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(backgroundColor: const Color(0xFF164653), content: Text(msg)),
+      );
+  }
+
+  // ----------------------------------------------------------
+  // DIALOG PILIH MODE
+  // ----------------------------------------------------------
+  Widget _modeDialog(BuildContext ctx, int region, int level, GameRegion r) {
     return AlertDialog(
       backgroundColor: const Color(0xFF202524),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -238,86 +285,54 @@ class _MapPageState extends State<MapPage> {
           ),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            r.material(_en),
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Row(
-            children: [
-              Text(
-                _en ? 'Current stars' : 'Bintang saat ini',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              r.material(_en),
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 12.5,
+                height: 1.4,
               ),
-              const Spacer(),
-              _starRow(before, size: 17),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          if (before == 0)
-            _noteBox(
-              icon: Icons.info_outline,
-              color: const Color(0xFF8DE7F5),
-              text: _en
-                  ? 'Choose the stars you earned in this round.'
-                  : 'Pilih bintang yang kamu peroleh di ronde ini.',
-            )
-          else if (before == 1)
-            _noteBox(
-              icon: Icons.replay,
-              color: const Color(0xFFFFC15C),
-              text: _en
-                  ? 'Only 1 star - you must replay to earn more before moving on.'
-                  : 'Bintang 1 - kamu harus mengulang agar bintang bertambah sebelum melanjut.',
-            )
-          else
-            _noteBox(
-              icon: Icons.check_circle_outline,
-              color: const Color(0xFF59C36A),
-              text: _en
-                  ? '2+ stars - this level qualifies for the next region.'
-                  : 'Bintang 2+ - level ini sudah cukup untuk pindah wilayah.',
             ),
-
-          const SizedBox(height: 18),
-
-          Text(
-            _en ? 'Choose your result:' : 'Pilih hasil permainanmu:',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 16),
+            Text(
+              _en ? 'Choose a mode:' : 'Pilih mode:',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              for (var value = 1; value <= 3; value++)
-                _starChoice(
-                  ctx: ctx,
-                  region: region,
-                  level: level,
-                  value: value,
-                  color: r.color,
-                  selected: before == value,
-                ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 10),
+            _modeCard(
+              ctx: ctx,
+              region: region,
+              level: level,
+              mode: GameMode.adventure,
+              icon: Icons.explore,
+              color: const Color(0xFF42CFFF),
+              title: _en ? 'Adventure' : 'Petualangan',
+              desc: _en
+                  ? 'Roam the maze, fight the monster'
+                  : 'Jelajah labirin & kalahkan monster',
+            ),
+            const SizedBox(height: 10),
+            _modeCard(
+              ctx: ctx,
+              region: region,
+              level: level,
+              mode: GameMode.logic,
+              icon: Icons.extension,
+              color: const Color(0xFFFFB21A),
+              title: _en ? 'Logic Arena' : 'Arena Logika',
+              desc: _en ? 'Arrange command blocks' : 'Susun blok perintah',
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -328,6 +343,72 @@ class _MapPageState extends State<MapPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Kartu mode di dalam dialog (ikon + judul + deskripsi + bintang).
+  Widget _modeCard({
+    required BuildContext ctx,
+    required int region,
+    required int level,
+    required GameMode mode,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String desc,
+  }) {
+    final int stars = MapProgress.starsOf(region, level, mode);
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => Navigator.of(ctx).pop(mode),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    desc,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _starRow(stars, size: 15),
+          ],
+        ),
+      ),
     );
   }
 
@@ -404,7 +485,7 @@ class _MapPageState extends State<MapPage> {
   Widget _overviewCard() {
     final int done = MapProgress.completedLevels();
     final int stars = MapProgress.totalStars();
-    final int maxTotal = MapProgress.totalLevels * MapProgress.maxStars;
+    final int maxTotal = MapProgress.totalLevels * MapProgress.maxStars * 2;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -524,7 +605,7 @@ class _MapPageState extends State<MapPage> {
     final bool unlocked = MapProgress.isRegionUnlocked(region);
     final bool ready = unlocked && MapProgress.isRegionReady(region);
     final int stars = MapProgress.regionStars(region);
-    final int maxStars = MapProgress.levelsPerRegion * MapProgress.maxStars;
+    final int maxStars = MapProgress.levelsPerRegion * MapProgress.maxStars * 2;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -729,7 +810,7 @@ class _MapPageState extends State<MapPage> {
   Widget _levelNode(int region, int level) {
     final GameRegion r = gameRegions[region];
     final bool unlocked = MapProgress.isLevelUnlocked(region, level);
-    final int stars = MapProgress.starsOf(region, level);
+    final int stars = MapProgress.bestStarsOf(region, level);
 
     final Color fill;
     final Color border;
@@ -807,7 +888,7 @@ class _MapPageState extends State<MapPage> {
             const SizedBox(height: 4),
 
             if (unlocked)
-              _starRow(stars, size: 17)
+              _modeStarsMini(region, level)
             else
               Text(
                 _en ? 'Locked' : 'Terkunci',
@@ -910,6 +991,45 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  /// Dua baris mini bintang di bawah tiap level: mode Petualangan & Arena Logika.
+  Widget _modeStarsMini(int region, int level) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _miniModeRow(
+          Icons.explore,
+          const Color(0xFF42CFFF),
+          MapProgress.starsOf(region, level, GameMode.adventure),
+        ),
+        const SizedBox(height: 2),
+        _miniModeRow(
+          Icons.extension,
+          const Color(0xFFFFB21A),
+          MapProgress.starsOf(region, level, GameMode.logic),
+        ),
+      ],
+    );
+  }
+
+  Widget _miniModeRow(IconData icon, Color color, int value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: color),
+        const SizedBox(width: 4),
+        for (var i = 0; i < 3; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 0.5),
+            child: Icon(
+              i < value ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 11,
+              color: i < value ? const Color(0xFFFFC15C) : Colors.white24,
+            ),
+          ),
+      ],
+    );
+  }
+
   // ----------------------------------------------------------
   // KOTAK INFO
   // ----------------------------------------------------------
@@ -938,66 +1058,6 @@ class _MapPageState extends State<MapPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------------
-  // PILIH BINTANG (DI DALAM DIALOG)
-  // ----------------------------------------------------------
-  Widget _starChoice({
-    required BuildContext ctx,
-    required int region,
-    required int level,
-    required int value,
-    required Color color,
-    required bool selected,
-  }) {
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.of(ctx).pop();
-          MapProgress.setStars(region, level, value);
-        },
-        child: Container(
-          height: 76,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? color.withValues(alpha: 0.16)
-                : const Color(0xFF141A19),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? color : Colors.white12,
-              width: selected ? 1.6 : 1,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.star_rounded,
-                size: 24,
-                color: value >= 2 ? const Color(0xFFFFC15C) : Colors.white38,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$value',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-              Text(
-                _en ? 'star' : 'bintang',
-                style: const TextStyle(color: Colors.white54, fontSize: 9.5),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

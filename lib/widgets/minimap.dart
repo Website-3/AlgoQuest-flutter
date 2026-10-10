@@ -25,10 +25,14 @@ class Minimap extends StatelessWidget {
     super.key,
     required this.service,
     this.cellPx = 8,
+    this.showMonster = true,
   });
 
   final AdventureService service;
   final double cellPx;
+
+  /// false bila monster sudah dikalahkan.
+  final bool showMonster;
 
   @override
   Widget build(BuildContext context) {
@@ -37,16 +41,25 @@ class Minimap extends StatelessWidget {
     final double size = sizeCells * cellPx;
     return CustomPaint(
       size: Size.square(size),
-      painter: _MinimapPainter(service: service, cellPx: cellPx),
+      painter: _MinimapPainter(
+        service: service,
+        cellPx: cellPx,
+        showMonster: showMonster,
+      ),
     );
   }
 }
 
 class _MinimapPainter extends CustomPainter {
-  const _MinimapPainter({required this.service, required this.cellPx});
+  const _MinimapPainter({
+    required this.service,
+    required this.cellPx,
+    required this.showMonster,
+  });
 
   final AdventureService service;
   final double cellPx;
+  final bool showMonster;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -88,10 +101,10 @@ class _MinimapPainter extends CustomPainter {
       }
     }
 
-    // Monster (hanya kalau pernah terlihat).
+    // Monster (hanya kalau pernah terlihat & belum dikalahkan).
     final int mRow = service.level.monster.row;
     final int mCol = service.level.monster.col;
-    if (service.isSeen(mRow, mCol)) {
+    if (showMonster && service.isSeen(mRow, mCol)) {
       final Offset mCenter = Offset(
         (mCol - c0 + 0.5) * cellPx,
         (mRow - r0 + 0.5) * cellPx,
@@ -146,5 +159,7 @@ class _MinimapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MinimapPainter oldDelegate) =>
-      oldDelegate.service != service || oldDelegate.cellPx != cellPx;
+      oldDelegate.service != service ||
+      oldDelegate.cellPx != cellPx ||
+      oldDelegate.showMonster != showMonster;
 }

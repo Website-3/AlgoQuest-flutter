@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_routes.dart';
 import '../services/auth_service.dart';
 import 'learn_page.dart';
+import 'adventure_page.dart';
 import 'game_page.dart';
 import 'map_page.dart';
 import 'profile_page.dart';
@@ -28,9 +29,10 @@ class _MainPageState extends State<MainPage> {
   int currentIndex = 0;
   bool isEnglish = false;
 
-  // Level yang sedang dimainkan di GamePage (index 6).
+  // Level & mode yang sedang dimainkan (index 6).
   int gameRegion = 0;
   int gameLevel = 0;
+  GameMode gameMode = GameMode.logic;
 
   void changeLanguage() {
     setState(() {
@@ -88,11 +90,12 @@ class _MainPageState extends State<MainPage> {
         onLanguageChanged: changeLanguage,
         onBack: () => changePage(0),
 
-        // Ketuk level -> langsung masuk halaman permainan
-        onStartLevel: (int region, int level) {
+        // Ketuk level -> pilih mode (Petualangan / Arena Logika) lalu masuk.
+        onStartLevel: (int region, int level, GameMode mode) {
           setState(() {
             gameRegion = region;
             gameLevel = level;
+            gameMode = mode;
             currentIndex = 6;
           });
         },
@@ -104,15 +107,26 @@ class _MainPageState extends State<MainPage> {
         onBack: () => changePage(0),
       ),
 
-      // Halaman inti permainan (index 6, sub-page -> tanpa bottom nav)
-      GamePage(
-        region: gameRegion,
-        level: gameLevel,
-        isEnglish: isEnglish,
-        onLanguageChanged: changeLanguage,
-        onBack: () => changePage(4),
-        onFinished: (int stars) => changePage(4),
-      ),
+      // Halaman inti permainan (index 6, sub-page -> tanpa bottom nav).
+      // Mode dipilih dari Peta: Petualangan atau Arena Logika.
+      if (gameMode == GameMode.adventure)
+        AdventurePage(
+          region: gameRegion,
+          level: gameLevel,
+          isEnglish: isEnglish,
+          onLanguageChanged: changeLanguage,
+          onBack: () => changePage(4),
+          onFinished: (int stars) => changePage(4),
+        )
+      else
+        GamePage(
+          region: gameRegion,
+          level: gameLevel,
+          isEnglish: isEnglish,
+          onLanguageChanged: changeLanguage,
+          onBack: () => changePage(4),
+          onFinished: (int stars) => changePage(4),
+        ),
     ];
 
     // Tab Map & Learn diganti dengan Statistics & Settings.

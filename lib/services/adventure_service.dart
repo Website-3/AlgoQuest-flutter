@@ -125,6 +125,14 @@ class AdventureService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Khusus uji/pratinjau: pindahkan pemain langsung ke posisi sel.
+  void jumpTo(double x, double y) {
+    _x = x;
+    _y = y;
+    _markSeen();
+    notifyListeners();
+  }
+
   int _facingFromVector(Offset v) {
     if (v.dx.abs() > v.dy.abs()) {
       return v.dx > 0 ? 1 : 3;

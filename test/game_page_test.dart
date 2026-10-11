@@ -115,5 +115,11 @@ void main() {
     }
 
     expect(find.text('MONSTER DIKALAHKAN!'), findsOneWidget);
+
+    // Lanjut -> soal logika asli muncul (dulu hanya placeholder).
+    await tester.tap(find.text('Lanjut \u25B8'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('SOAL LOGIKA'), findsOneWidget);
   });
 }

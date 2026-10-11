@@ -10,6 +10,10 @@ void resetProgress() {
       MapProgress.setStars(r, l, GameMode.adventure, 0);
       MapProgress.setStars(r, l, GameMode.logic, 0);
     }
+    MapProgress.storySeen[r] = false;
+  }
+  for (var i = 0; i < MapProgress.totalLevels; i++) {
+    MapProgress.quizCorrect[i] = false;
   }
 }
 
@@ -36,13 +40,46 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
+  // Buka Level 1 Wilayah 1. Kali pertama dialog cerita NPC muncul lebih
+  // dulu; tutup dulu agar dialog pilih mode terlihat.
+  Future<void> openLevel1(WidgetTester tester) async {
+    await tester.tap(find.text('1').first);
+    await tester.pumpAndSettle();
+    final Finder story = find.text('Mengerti!');
+    if (story.evaluate().isNotEmpty) {
+      await tester.tap(story);
+      await tester.pumpAndSettle();
+    }
+  }
+
+  testWidgets('pertama kali level dibuka: cerita NPC lebih dulu', (
+    tester,
+  ) async {
+    await bigScreen(tester);
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('1').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profesor Bit'), findsOneWidget);
+    expect(find.text('Hutan Algoritma'), findsOneWidget);
+    expect(find.text('Mengerti!'), findsOneWidget);
+    expect(find.text('Pilih mode:'), findsNothing);
+
+    await tester.tap(find.text('Mengerti!'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pilih mode:'), findsOneWidget);
+  });
+
   testWidgets('mengetuk level membuka dialog pilih mode', (tester) async {
     await bigScreen(tester);
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
     // Level 1 wilayah 1 adalah satu-satunya yang terbuka (angka "1").
-    await tester.tap(find.text('1').first);
+    await openLevel1(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Pilih mode:'), findsOneWidget);
@@ -69,8 +106,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('1').first);
-    await tester.pumpAndSettle();
+    await openLevel1(tester);
     await tester.tap(find.text('Petualangan'));
     await tester.pumpAndSettle();
 
@@ -90,8 +126,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('1').first);
-    await tester.pumpAndSettle();
+    await openLevel1(tester);
     await tester.tap(find.text('Arena Logika'));
     await tester.pumpAndSettle();
 
@@ -105,8 +140,7 @@ void main() {
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('1').first);
-    await tester.pumpAndSettle();
+    await openLevel1(tester);
     await tester.tap(find.text('Arena Logika'));
     await tester.pumpAndSettle();
 

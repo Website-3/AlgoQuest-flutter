@@ -9,6 +9,10 @@ void resetProgress() {
       MapProgress.setStars(r, l, GameMode.adventure, 0);
       MapProgress.setStars(r, l, GameMode.logic, 0);
     }
+    MapProgress.storySeen[r] = false;
+  }
+  for (var i = 0; i < MapProgress.totalLevels; i++) {
+    MapProgress.quizCorrect[i] = false;
   }
 }
 
@@ -99,5 +103,38 @@ void main() {
     expect(MapProgress.modeStars(GameMode.logic), 0);
     expect(MapProgress.maxTotalStars(), 90);
     expect(MapProgress.readyRegions(), 1);
+  });
+
+  test('cerita wilayah ditandai sudah dibaca & bertahan setelah simpan', () async {
+    expect(MapProgress.isStorySeen(2), isFalse);
+
+    MapProgress.markStorySeen(2);
+    expect(MapProgress.isStorySeen(2), isTrue);
+    expect(MapProgress.isStorySeen(0), isFalse);
+
+    await MapProgress.save();
+    MapProgress.storySeen[2] = false; // lupakan di memori
+    await MapProgress.load();
+    expect(MapProgress.isStorySeen(2), isTrue);
+  });
+
+  test('soal benar dihitung sekali per level & tersimpan', () async {
+    expect(MapProgress.quizCorrectCount(), 0);
+    expect(MapProgress.isQuizCorrect(0, 0), isFalse);
+
+    MapProgress.markQuizCorrect(0, 0);
+    MapProgress.markQuizCorrect(0, 0); // ganda tidak menambah
+    MapProgress.markQuizCorrect(3, 1);
+    expect(MapProgress.quizCorrectCount(), 2);
+    expect(MapProgress.isQuizCorrect(0, 0), isTrue);
+    expect(MapProgress.isQuizCorrect(3, 1), isTrue);
+    expect(MapProgress.isQuizCorrect(0, 1), isFalse);
+
+    await MapProgress.save();
+    MapProgress.quizCorrect[0] = false;
+    MapProgress.quizCorrect[10] = false;
+    await MapProgress.load();
+    expect(MapProgress.isQuizCorrect(0, 0), isTrue);
+    expect(MapProgress.isQuizCorrect(3, 1), isTrue);
   });
 }

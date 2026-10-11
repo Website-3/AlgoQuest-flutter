@@ -14,6 +14,7 @@ import '../widgets/hero_token.dart';
 import '../widgets/hp_bar.dart';
 import '../widgets/minimap.dart';
 import '../widgets/monster_token.dart';
+import '../widgets/quiz_dialog.dart';
 import '../widgets/virtual_joystick.dart';
 import 'map_page.dart';
 
@@ -873,9 +874,22 @@ class _AdventurePageState extends State<AdventurePage>
                   children: <Widget>[
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Juice.click();
                           if (won && widget.onFinished != null) {
+                            final bool correct = await showQuizDialog(
+                              context,
+                              region: widget.region,
+                              level: widget.level,
+                              isEnglish: _en,
+                            );
+                            if (!mounted) return;
+                            if (correct) {
+                              MapProgress.markQuizCorrect(
+                                widget.region,
+                                widget.level,
+                              );
+                            }
                             widget.onFinished!(_victoryStars());
                           } else {
                             widget.onBack();

@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/game_service.dart';
 import '../widgets/app_header.dart';
+import '../widgets/npc_dialog.dart';
 
 // ============================================================
 // MAP PAGE — PETA DUNIA
@@ -119,6 +121,12 @@ class MapProgress {
   static final List<int> adventureStars = List<int>.filled(totalLevels, 0);
   static final List<int> logicStars = List<int>.filled(totalLevels, 0);
 
+  /// Wilayah yang cerita pembukanya sudah pernah ditampilkan.
+  static final List<bool> storySeen = List<bool>.filled(regionCount, false);
+
+  /// Level yang soalnya sudah dijawab dengan benar.
+  static final List<bool> quizCorrect = List<bool>.filled(totalLevels, false);
+
   static List<int> _modeList(GameMode mode) =>
       mode == GameMode.adventure ? adventureStars : logicStars;
 
@@ -137,6 +145,8 @@ class MapProgress {
       if (decoded is! Map) return;
       _readInto(adventureStars, decoded['adventure']);
       _readInto(logicStars, decoded['logic']);
+      _readBoolInto(storySeen, decoded['story']);
+      _readBoolInto(quizCorrect, decoded['quiz']);
       revision.value++;
     } catch (_) {
       // Abaikan: progres tetap berjalan di memori.
@@ -151,6 +161,14 @@ class MapProgress {
     }
   }
 
+  static void _readBoolInto(List<bool> target, Object? source) {
+    if (source is! List) return;
+    for (var i = 0; i < target.length && i < source.length; i++) {
+      final Object? value = source[i];
+      if (value is bool) target[i] = value;
+    }
+  }
+
   /// Simpan progres. Aman dipanggil walau gagal.
   static Future<void> save() async {
     try {
@@ -160,6 +178,8 @@ class MapProgress {
         jsonEncode(<String, Object>{
           'adventure': adventureStars,
           'logic': logicStars,
+          'story': storySeen,
+          'quiz': quizCorrect,
         }),
       );
     } catch (_) {
@@ -171,7 +191,42 @@ class MapProgress {
   static void reset() {
     adventureStars.fillRange(0, adventureStars.length, 0);
     logicStars.fillRange(0, logicStars.length, 0);
+    storySeen.fillRange(0, storySeen.length, false);
+    quizCorrect.fillRange(0, quizCorrect.length, false);
     revision.value++;
+  }
+
+  // ---------- Cerita wilayah ----------
+
+  static bool isStorySeen(int region) => storySeen[region.clamp(0, regionCount - 1)];
+
+  static void markStorySeen(int region) {
+    storySeen[region.clamp(0, regionCount - 1)] = true;
+    revision.value++;
+    unawaited(save());
+  }
+
+  // ---------- Soal logika ----------
+
+  static bool isQuizCorrect(int region, int level) =>
+      quizCorrect[indexOf(region, level)];
+
+  /// Tandai soal level ini sudah dijawab benar (sekali saja).
+  static void markQuizCorrect(int region, int level) {
+    final int i = indexOf(region, level);
+    if (quizCorrect[i]) return;
+    quizCorrect[i] = true;
+    revision.value++;
+    unawaited(save());
+  }
+
+  /// Jumlah level yang soalnya sudah dijawab benar.
+  static int quizCorrectCount() {
+    var count = 0;
+    for (final bool b in quizCorrect) {
+      if (b) count++;
+    }
+    return count;
   }
 
   // ---------- Baca/tulis bintang ----------
@@ -316,6 +371,13 @@ class _MapPageState extends State<MapPage> {
     final GameRegion r = gameRegions[region];
     final bool wasReady = MapProgress.isRegionReady(region);
 
+    // Pertama kali memasuki wilayah ini -> perkenalan dari NPC.
+    if (!MapProgress.isStorySeen(region)) {
+      await showNpcStory(context, region: region, isEnglish: _en);
+      if (!mounted) return;
+      MapProgress.markStorySeen(region);
+    }
+
     final GameMode? mode = await showDialog<GameMode>(
       context: context,
       builder: (ctx) => _modeDialog(ctx, region, level, r),
@@ -357,6 +419,14 @@ class _MapPageState extends State<MapPage> {
   // DIALOG PILIH MODE
   // ----------------------------------------------------------
   Widget _modeDialog(BuildContext ctx, int region, int level, GameRegion r) {
+    final MazeLevel maze = MazeCatalog.level(region, level);
+    final String monster = maze.monsterName(_en);
+    final String adventureMission = _en
+        ? 'Mission: defeat $monster (HP ${maze.enemyHp}), then answer the logic question.'
+        : 'Misi: kalahkan $monster (HP ${maze.enemyHp}), lalu jawab soalnya.';
+    final String logicMission = _en
+        ? 'Mission: defeat $monster (HP ${maze.enemyHp}) using at most ${maze.maxBlocks} blocks.'
+        : 'Misi: kalahkan $monster (HP ${maze.enemyHp}) dengan maksimal ${maze.maxBlocks} blok.';
     return AlertDialog(
       backgroundColor: const Color(0xFF202524),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -406,6 +476,7 @@ class _MapPageState extends State<MapPage> {
               desc: _en
                   ? 'Roam the maze, fight the monster'
                   : 'Jelajah labirin & kalahkan monster',
+              mission: adventureMission,
             ),
             const SizedBox(height: 10),
             _modeCard(
@@ -417,11 +488,19 @@ class _MapPageState extends State<MapPage> {
               color: const Color(0xFFFFB21A),
               title: _en ? 'Logic Arena' : 'Arena Logika',
               desc: _en ? 'Arrange command blocks' : 'Susun blok perintah',
+              mission: logicMission,
             ),
           ],
         ),
       ),
       actions: [
+        TextButton(
+          onPressed: () => showNpcStory(ctx, region: region, isEnglish: _en),
+          child: Text(
+            _en ? 'Story' : 'Cerita',
+            style: const TextStyle(color: Color(0xFF42CFFF)),
+          ),
+        ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
           child: Text(
@@ -443,6 +522,7 @@ class _MapPageState extends State<MapPage> {
     required Color color,
     required String title,
     required String desc,
+    required String mission,
   }) {
     final int stars = MapProgress.starsOf(region, level, mode);
     return InkWell(
@@ -487,6 +567,24 @@ class _MapPageState extends State<MapPage> {
                       fontSize: 11.5,
                       height: 1.3,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.flag, color: color, size: 12),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          mission,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

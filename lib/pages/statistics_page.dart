@@ -223,6 +223,31 @@ class StatisticsPage extends StatelessWidget {
             ],
           ),
 
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: StatCard(
+                  icon: Icons.quiz_rounded,
+                  iconColor: const Color(0xFF4DD7F7),
+                  value:
+                      '${MapProgress.quizCorrectCount()}/${MapProgress.totalLevels}',
+                  label: _en ? 'Quizzes Correct' : 'Soal Benar',
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: StatCard(
+                  icon: Icons.flag_rounded,
+                  iconColor: const Color(0xFF59C36A),
+                  value: '$readyRegions/${MapProgress.regionCount}',
+                  label: _en ? 'Regions Cleared' : 'Wilayah Tuntas',
+                ),
+              ),
+            ],
+          ),
+
           const SizedBox(height: 28),
 
           // PROGRES WILAYAH

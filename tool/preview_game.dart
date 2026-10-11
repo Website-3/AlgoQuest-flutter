@@ -8,9 +8,57 @@ import 'package:flutter_application_1/pages/game_page.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
 import 'package:flutter_application_1/pages/settings_page.dart';
 import 'package:flutter_application_1/pages/statistics_page.dart';
+import 'package:flutter_application_1/widgets/npc_dialog.dart';
+import 'package:flutter_application_1/widgets/quiz_dialog.dart';
 
 void main() {
   runApp(const PreviewApp());
+}
+
+/// Pratinjau cepat dialog cerita NPC / soal logika (untuk tangkapan layar).
+class DialogPreview extends StatefulWidget {
+  const DialogPreview({
+    super.key,
+    required this.quiz,
+    required this.region,
+    required this.level,
+  });
+
+  final bool quiz;
+  final int region;
+  final int level;
+
+  @override
+  State<DialogPreview> createState() => _DialogPreviewState();
+}
+
+class _DialogPreviewState extends State<DialogPreview> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.quiz) {
+        showQuizDialog(
+          context,
+          region: widget.region,
+          level: widget.level,
+          isEnglish: false,
+        );
+      } else {
+        showNpcStory(
+          context,
+          region: widget.region,
+          isEnglish: false,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(color: Color(0xFF0B100F));
+  }
 }
 
 /// Pratinjau alur Peta -> pilih mode -> halaman permainan.
@@ -89,12 +137,24 @@ class PreviewApp extends StatelessWidget {
       MapProgress.setStars(2, 0, GameMode.logic, 2);
     }
 
+    // Pratinjau: anggap cerita sudah dibaca agar dialog pilih mode
+    // langsung terbuka (tidak terhalang dialog cerita).
+    if (uri.queryParameters['seen'] == '1') {
+      for (var r = 0; r < MapProgress.regionCount; r++) {
+        MapProgress.storySeen[r] = true;
+      }
+    }
+
     final Widget page = mode == 'map'
         ? MapPreview(openDialog: dlg)
         : mode == 'stats'
         ? StatisticsPage(isEnglish: false, onLanguageChanged: () {})
         : mode == 'settings'
         ? SettingsPage(isEnglish: false, onLanguageChanged: () {})
+        : mode == 'quiz'
+        ? DialogPreview(quiz: true, region: region, level: level)
+        : mode == 'npc'
+        ? DialogPreview(quiz: false, region: region, level: level)
         : mode == 'adventure'
         ? AdventurePage(
             region: region,

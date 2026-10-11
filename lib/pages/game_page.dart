@@ -7,6 +7,7 @@ import '../services/juice.dart';
 import '../widgets/app_header.dart';
 import '../widgets/hero_token.dart';
 import '../widgets/monster_token.dart';
+import '../widgets/quiz_dialog.dart';
 import 'map_page.dart';
 
 // ============================================================
@@ -246,12 +247,14 @@ class _GamePageState extends State<GamePage>
 
     if (!mounted) return;
     if (next == true) {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext ctx) => _soalDialog(ctx),
+      final bool correct = await showQuizDialog(
+        context,
+        region: widget.region,
+        level: widget.level,
+        isEnglish: _en,
       );
       if (!mounted) return;
+      if (correct) MapProgress.markQuizCorrect(widget.region, widget.level);
       widget.onFinished?.call(stars);
     } else {
       setState(() => _engine.reset());
@@ -1100,66 +1103,6 @@ class _GamePageState extends State<GamePage>
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _soalDialog(BuildContext ctx) {
-    return Dialog(
-      backgroundColor: _kCard,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: _kCyan.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.quiz_rounded, color: _kCyan, size: 34),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              _en ? 'QUESTION' : 'SOAL',
-              style: const TextStyle(
-                color: _kText,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _en
-                  ? 'The monster is defeated. The question for this level will be available in the next update.'
-                  : 'Monster sudah dikalahkan. Soal untuk level ini akan hadir di pembaruan berikutnya.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: _kMuted, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kCyan,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  _en ? 'Back to Map' : 'Kembali ke Peta',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
           ],
         ),

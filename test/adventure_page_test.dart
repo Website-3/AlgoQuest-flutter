@@ -57,6 +57,10 @@ void _resetProgress() {
       MapProgress.setStars(r, l, GameMode.adventure, 0);
       MapProgress.setStars(r, l, GameMode.logic, 0);
     }
+    MapProgress.storySeen[r] = false;
+  }
+  for (var i = 0; i < MapProgress.totalLevels; i++) {
+    MapProgress.quizCorrect[i] = false;
   }
 }
 
@@ -212,10 +216,20 @@ void main() {
       expect(find.text('MENANG!'), findsOneWidget);
       expect(MapProgress.starsOf(0, 0, GameMode.adventure), greaterThan(0));
 
-      // Kembali ke peta -> onFinished dipanggil dengan bintang.
+      // Kembali ke peta -> soal logika muncul lebih dulu.
       await tester.tap(find.text('KE PETA'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 150));
+
+      expect(find.text('SOAL LOGIKA'), findsOneWidget);
+
+      // Jawab benar, lalu lanjut -> onFinished dipanggil dengan bintang.
+      await tester.tap(find.text('Rebus air, masukkan mi, tiriskan'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tap(find.text('Lanjut \u25B8'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+
       expect(awarded, isNotNull);
       expect(awarded, greaterThan(0));
     },

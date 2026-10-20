@@ -3,16 +3,31 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 // ============================================================
-// HERO TOKEN — KARAKTER PEMAIN
+// HERO TOKEN — KSATRIA (memakai gambar PNG)
 // ============================================================
-// Gambar karakter berupa orang (bukan kursor) lengkap dengan
-// helm, mata, badan, lengan, kaki, dan pedang. Ada juga panah
-// arah hadap ("") di lantai yang ikut berputar sesuai arah
-// karakter menghadap (0 = atas, 1 = kanan, 2 = bawah, 3 = kiri).
-// Widget ini dipakai bersama oleh Mode Petualangan dan
-// Mode Arena Logika supaya tampilannya konsisten.
+// Bayangan lantai, cahaya cyan, dan panah arah tetap dipertahankan.
+// Tubuh karakter berasal dari gambar. API widget tidak berubah
+// (size, facing, arrowColor, showArrow), jadi adventure_page.dart
+// tidak perlu diubah.
 
 const Color _kCyan = Color(0xFF42CFFF);
+
+// ---------- SETELAN GAMBAR (ubah di sini) ----------
+/// Nama file gambar hero di assets/images/ (ganti sesuai nama file aslimu).
+const String _kHeroAsset = 'assets/images/hero.png';
+
+/// Ksatria ini condong menghadap kiri (pedang di sisi kiri gambar).
+/// Kalau saat jalan ke kanan terlihat aneh, ubah jadi true.
+const bool _kImageFacesRight = false;
+
+/// Seberapa besar gambar di dalam kotak (1.0 = penuh).
+const double _kImageScale = 1.0;
+
+/// Geser gambar ke atas/bawah (pecahan ukuran). Negatif = naik.
+const double _kImageYOffset = 0.0;
+
+/// Panah arah di lantai. Ubah ke false kalau terasa mengganggu.
+const bool _kShowFacingArrow = true;
 
 class HeroToken extends StatelessWidget {
   const HeroToken({
@@ -32,214 +47,123 @@ class HeroToken extends StatelessWidget {
   /// Warna panah penunjuk arah.
   final Color arrowColor;
 
-  /// Sembunyikan panah arah (misal saat bertarung).
+  /// Sembunyikan panah arah.
   final bool showArrow;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          if (showArrow)
-            Positioned.fill(
-              child: Transform.rotate(
-                angle: (facing - 1) * math.pi / 2,
-                child: CustomPaint(
-                  painter: _FacingPainter(
-                    color: arrowColor.withValues(alpha: 0.6),
+    // Balik gambar saat hero menghadap sisi yang berlawanan
+    // dengan arah asli gambar.
+    final bool flip = _kImageFacesRight ? facing == 3 : facing == 1;
+
+    Widget img = Image.asset(
+      _kHeroAsset,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, __, ___) =>
+          Icon(Icons.shield, size: size * 0.8, color: arrowColor),
+    );
+    if (flip) {
+      img = Transform.flip(flipX: true, child: img);
+    }
+
+    return RepaintBoundary(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            // Bayangan + cahaya cyan di lantai
+            const Positioned.fill(
+              child: CustomPaint(painter: _GroundPainter()),
+            ),
+            // Panah arah hadap
+            if (showArrow && _kShowFacingArrow)
+              Positioned.fill(
+                child: Transform.rotate(
+                  angle: (facing - 1) * math.pi / 2,
+                  child: CustomPaint(
+                    isComplex: true,
+                    painter: _FacingPainter(color: arrowColor),
                   ),
                 ),
               ),
+            // Ksatria dari gambar
+            Positioned.fill(
+              child: Transform.translate(
+                offset: Offset(0, size * _kImageYOffset),
+                child: Transform.scale(
+                  scale: _kImageScale,
+                  alignment: Alignment.bottomCenter,
+                  child: img,
+                ),
+              ),
             ),
-          Positioned.fill(
-            child: CustomPaint(painter: const _HeroPainter()),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 // ------------------------------------------------------------
-// PELUKIS KARAKTER
+// BAYANGAN & CAHAYA LANTAI
 // ------------------------------------------------------------
-class _HeroPainter extends CustomPainter {
-  const _HeroPainter();
+class _GroundPainter extends CustomPainter {
+  const _GroundPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final double s = size.width;
 
-    // Bayangan di lantai
+    // cahaya cyan halus di belakang karakter
+    final Offset c = Offset(s * 0.5, s * 0.55);
+    canvas.drawCircle(
+      c,
+      s * 0.42,
+      Paint()
+        ..isAntiAlias = true
+        ..shader = RadialGradient(
+          colors: <Color>[
+            _kCyan.withValues(alpha: 0.20),
+            _kCyan.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: c, radius: s * 0.42)),
+    );
+
+    // bayangan lantai (berlapis)
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(s * 0.5, s * 0.94),
-        width: s * 0.64,
-        height: s * 0.15,
+        width: s * 0.74,
+        height: s * 0.17,
       ),
-      Paint()..color = Colors.black.withValues(alpha: 0.38),
-    );
-
-    // Garis tepi gelap (membuat karakter menonjol dari latar).
-    final Paint outline = Paint()
-      ..color = const Color(0xFF0C1522)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = s * 0.026
-      ..strokeJoin = StrokeJoin.round;
-
-    // Jubah di belakang badan.
-    final Path cape = Path()
-      ..moveTo(s * 0.30, s * 0.44)
-      ..quadraticBezierTo(s * 0.16, s * 0.68, s * 0.24, s * 0.85)
-      ..lineTo(s * 0.76, s * 0.85)
-      ..quadraticBezierTo(s * 0.84, s * 0.68, s * 0.70, s * 0.44)
-      ..close();
-    canvas.drawPath(cape, Paint()..color = const Color(0xFF1C5470));
-    canvas.drawPath(
-      cape,
       Paint()
-        ..color = const Color(0xFF0C1522)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.02
-        ..strokeJoin = StrokeJoin.round,
+        ..color = Colors.black.withValues(alpha: 0.30)
+        ..isAntiAlias = true
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.035),
     );
-
-    // Kaki
-    final Paint leg = Paint()..color = const Color(0xFF23324C);
-    final RRect legL = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.35, s * 0.64, s * 0.12, s * 0.26),
-      Radius.circular(s * 0.05),
-    );
-    final RRect legR = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.53, s * 0.64, s * 0.12, s * 0.26),
-      Radius.circular(s * 0.05),
-    );
-    canvas.drawRRect(legL, leg);
-    canvas.drawRRect(legR, leg);
-    canvas.drawRRect(legL, outline);
-    canvas.drawRRect(legR, outline);
-
-    // Pedang (di sisi kanan)
-    final RRect blade = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34),
-      Radius.circular(s * 0.03),
-    );
-    canvas.drawRRect(
-      blade,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Color(0xFFFFFFFF), Color(0xFF9FB4BE)],
-        ).createShader(Rect.fromLTWH(s * 0.79, s * 0.14, s * 0.055, s * 0.34)),
-    );
-    canvas.drawRRect(blade, outline..strokeWidth = s * 0.018);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.72, s * 0.46, s * 0.19, s * 0.05),
-        Radius.circular(s * 0.02),
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(s * 0.5, s * 0.935),
+        width: s * 0.48,
+        height: s * 0.09,
       ),
-      Paint()..color = const Color(0xFFC08A2E),
-    );
-
-    // Lengan
-    final Paint arm = Paint()..color = const Color(0xFF2F8FC4);
-    final RRect armL = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.17, s * 0.45, s * 0.14, s * 0.24),
-      Radius.circular(s * 0.07),
-    );
-    final RRect armR = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.69, s * 0.45, s * 0.14, s * 0.24),
-      Radius.circular(s * 0.07),
-    );
-    canvas.drawRRect(armL, arm);
-    canvas.drawRRect(armR, arm);
-    canvas.drawRRect(armL, outline..strokeWidth = s * 0.022);
-    canvas.drawRRect(armR, outline);
-
-    // Badan (bergradasi agar terlihat bervolume)
-    final RRect bodyRR = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29),
-      Radius.circular(s * 0.1),
-    );
-    canvas.drawRRect(
-      bodyRR,
       Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[Color(0xFF6FDFFF), Color(0xFF2E9FCF)],
-        ).createShader(Rect.fromLTWH(s * 0.29, s * 0.42, s * 0.42, s * 0.29)),
-    );
-    canvas.drawRRect(bodyRR, outline..strokeWidth = s * 0.024);
-    // Kilau badan
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(s * 0.34, s * 0.45, s * 0.12, s * 0.06),
-        Radius.circular(s * 0.03),
-      ),
-      Paint()..color = Colors.white.withValues(alpha: 0.28),
-    );
-    // Sabuk
-    canvas.drawRect(
-      Rect.fromLTWH(s * 0.29, s * 0.635, s * 0.42, s * 0.04),
-      Paint()..color = const Color(0xFF1B6E8C),
-    );
-
-    // Kepala
-    final Offset head = Offset(s * 0.5, s * 0.29);
-    canvas.drawCircle(
-      head,
-      s * 0.19,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(-0.3, -0.4),
-          radius: 0.95,
-          colors: <Color>[Color(0xFFFFE4C6), Color(0xFFF0C296)],
-        ).createShader(Rect.fromCircle(center: head, radius: s * 0.19)),
-    );
-    canvas.drawCircle(
-      head,
-      s * 0.19,
-      Paint()
-        ..color = const Color(0xFF0C1522)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.024,
-    );
-    // Helm / rambut
-    canvas.drawArc(
-      Rect.fromCircle(center: head, radius: s * 0.19),
-      math.pi * 1.02,
-      math.pi * 0.96,
-      true,
-      Paint()..color = const Color(0xFF22314A),
-    );
-    // Mata
-    final Paint eye = Paint()..color = const Color(0xFF14232E);
-    canvas.drawCircle(Offset(s * 0.435, s * 0.30), s * 0.028, eye);
-    canvas.drawCircle(Offset(s * 0.565, s * 0.30), s * 0.028, eye);
-    // Senyum
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(s * 0.5, s * 0.345), radius: s * 0.06),
-      0.25,
-      math.pi - 0.5,
-      false,
-      Paint()
-        ..color = const Color(0xFF14232E)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.022
-        ..strokeCap = StrokeCap.round,
+        ..color = Colors.black.withValues(alpha: 0.45)
+        ..isAntiAlias = true
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.02),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _HeroPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GroundPainter oldDelegate) => false;
 }
 
-/// Panah penunjuk arah hadap karakter (di atas lantai).
+// ------------------------------------------------------------
+// PANAH ARAH HADAP (sama seperti versi lama)
+// ------------------------------------------------------------
 class _FacingPainter extends CustomPainter {
   final Color color;
 
@@ -252,14 +176,40 @@ class _FacingPainter extends CustomPainter {
       ..moveTo(s * 0.24, s * 0.16)
       ..lineTo(s * 0.84, s * 0.5)
       ..lineTo(s * 0.24, s * 0.84);
+
+    // glow lembut
     canvas.drawPath(
       path,
       Paint()
-        ..color = color
+        ..color = color.withValues(alpha: 0.55)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.13
+        ..strokeWidth = s * 0.15
         ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.04),
+    );
+    // garis panah
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: 0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.10
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+    // highlight tipis di tengah panah
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.025
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
     );
   }
 

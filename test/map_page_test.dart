@@ -5,16 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Kosongkan seluruh progres (state statis) sebelum tiap tes.
 void resetProgress() {
-  for (var r = 0; r < MapProgress.regionCount; r++) {
-    for (var l = 0; l < MapProgress.levelsPerRegion; l++) {
-      MapProgress.setStars(r, l, GameMode.adventure, 0);
-      MapProgress.setStars(r, l, GameMode.logic, 0);
-    }
-    MapProgress.storySeen[r] = false;
-  }
-  for (var i = 0; i < MapProgress.totalLevels; i++) {
-    MapProgress.quizCorrect[i] = false;
-  }
+  MapProgress.reset();
 }
 
 void main() {
@@ -23,7 +14,7 @@ void main() {
   });
   setUp(resetProgress);
 
-  Widget wrap({void Function(int, int, GameMode)? onStartLevel}) {
+  Widget wrap({void Function(int, int)? onStartLevel}) {
     return MaterialApp(
       home: MapPage(
         isEnglish: false,
@@ -41,7 +32,7 @@ void main() {
   }
 
   // Buka Level 1 Wilayah 1. Kali pertama dialog cerita NPC muncul lebih
-  // dulu; tutup dulu agar dialog pilih mode terlihat.
+  // dulu; tutup dulu agar aksi berikutnya terlihat.
   Future<void> openLevel1(WidgetTester tester) async {
     await tester.tap(find.text('1').first);
     await tester.pumpAndSettle();
@@ -56,7 +47,11 @@ void main() {
     tester,
   ) async {
     await bigScreen(tester);
-    await tester.pumpWidget(wrap());
+    bool started = false;
+
+    await tester.pumpWidget(
+      wrap(onStartLevel: (region, level) => started = true),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('1').first);
@@ -65,99 +60,83 @@ void main() {
     expect(find.text('Profesor Bit'), findsOneWidget);
     expect(find.text('Hutan Algoritma'), findsOneWidget);
     expect(find.text('Mengerti!'), findsOneWidget);
-    expect(find.text('Pilih mode:'), findsNothing);
+    expect(started, isFalse);
 
     await tester.tap(find.text('Mengerti!'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pilih mode:'), findsOneWidget);
+    expect(started, isTrue);
   });
 
-  testWidgets('mengetuk level membuka dialog pilih mode', (tester) async {
+  testWidgets('mengetuk level langsung memulai permainan', (tester) async {
     await bigScreen(tester);
-    await tester.pumpWidget(wrap());
-    await tester.pumpAndSettle();
+    MapProgress.storySeen[0] = true;
 
-    // Level 1 wilayah 1 adalah satu-satunya yang terbuka (angka "1").
-    await openLevel1(tester);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pilih mode:'), findsOneWidget);
-    expect(find.text('Petualangan'), findsOneWidget);
-    expect(find.text('Arena Logika'), findsOneWidget);
-  });
-
-  testWidgets('memilih Petualangan memanggil onStartLevel(adventure)', (
-    tester,
-  ) async {
-    await bigScreen(tester);
-    GameMode? picked;
     int? pickedRegion;
     int? pickedLevel;
 
     await tester.pumpWidget(
       wrap(
-        onStartLevel: (region, level, mode) {
+        onStartLevel: (region, level) {
           pickedRegion = region;
           pickedLevel = level;
-          picked = mode;
         },
       ),
     );
     await tester.pumpAndSettle();
 
-    await openLevel1(tester);
-    await tester.tap(find.text('Petualangan'));
+    await tester.tap(find.text('1').first);
     await tester.pumpAndSettle();
 
-    expect(picked, GameMode.adventure);
     expect(pickedRegion, 0);
     expect(pickedLevel, 0);
   });
 
-  testWidgets('memilih Arena Logika memanggil onStartLevel(logic)', (
+  testWidgets('tanpa host: mengetuk level mensimulasikan 3 bintang', (
     tester,
   ) async {
     await bigScreen(tester);
-    GameMode? picked;
+    MapProgress.storySeen[0] = true;
 
-    await tester.pumpWidget(
-      wrap(onStartLevel: (region, level, mode) => picked = mode),
-    );
-    await tester.pumpAndSettle();
-
-    await openLevel1(tester);
-    await tester.tap(find.text('Arena Logika'));
-    await tester.pumpAndSettle();
-
-    expect(picked, GameMode.logic);
-  });
-
-  testWidgets('tanpa host: memilih mode mensimulasikan 3 bintang', (
-    tester,
-  ) async {
-    await bigScreen(tester);
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
     await openLevel1(tester);
-    await tester.tap(find.text('Arena Logika'));
-    await tester.pumpAndSettle();
 
-    expect(MapProgress.starsOf(0, 0, GameMode.logic), 3);
-    expect(MapProgress.starsOf(0, 0, GameMode.adventure), 0);
+    expect(MapProgress.starsOf(0, 0), 3);
   });
 
-  testWidgets('level terbuka menampilkan bintang dua mode', (tester) async {
+  testWidgets('level terbuka menampilkan satu baris bintang', (tester) async {
     await bigScreen(tester);
+    MapProgress.storySeen[0] = true;
+
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    // Hanya level 1 wilayah 1 yang terbuka -> satu baris ikon tiap mode.
-    expect(find.byIcon(Icons.explore), findsOneWidget);
-    expect(find.byIcon(Icons.extension), findsOneWidget);
+    // Tidak ada lagi ikon mode Petualangan/Arena Logika.
+    expect(find.byIcon(Icons.explore), findsNothing);
+    expect(find.byIcon(Icons.extension), findsNothing);
+
+    // Wilayah terbuka punya tombol cerita.
+    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
 
     // Level 2 & 3 masih terkunci.
     expect(find.text('Terkunci'), findsWidgets);
+  });
+
+  testWidgets('tombol cerita di kartu wilayah membuka ulang cerita', (
+    tester,
+  ) async {
+    await bigScreen(tester);
+    MapProgress.storySeen[0] = true;
+
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_book_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profesor Bit'), findsOneWidget);
+    expect(find.text('Mengerti!'), findsOneWidget);
   });
 }

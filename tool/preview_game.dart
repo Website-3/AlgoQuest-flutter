@@ -3,7 +3,6 @@
 // Jalankan: flutter run -t tool/preview_game.dart
 // Atau akses web dengan query: ?r=0&l=0  (region 0-4, level 0-2)
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/pages/adventure_page.dart';
 import 'package:flutter_application_1/pages/game_page.dart';
 import 'package:flutter_application_1/pages/map_page.dart';
 import 'package:flutter_application_1/pages/settings_page.dart';
@@ -61,11 +60,9 @@ class _DialogPreviewState extends State<DialogPreview> {
   }
 }
 
-/// Pratinjau alur Peta -> pilih mode -> halaman permainan.
+/// Pratinjau alur Peta -> halaman permainan.
 class MapPreview extends StatefulWidget {
-  const MapPreview({super.key, this.openDialog = false});
-
-  final bool openDialog;
+  const MapPreview({super.key});
 
   @override
   State<MapPreview> createState() => _MapPreviewState();
@@ -74,7 +71,6 @@ class MapPreview extends StatefulWidget {
 class _MapPreviewState extends State<MapPreview> {
   int? _region;
   int? _level;
-  GameMode _mode = GameMode.logic;
 
   @override
   Widget build(BuildContext context) {
@@ -82,33 +78,22 @@ class _MapPreviewState extends State<MapPreview> {
       return MapPage(
         isEnglish: false,
         onLanguageChanged: () {},
-        debugOpenDialog: widget.openDialog,
-        onStartLevel: (region, level, mode) {
+        onStartLevel: (region, level) {
           setState(() {
             _region = region;
             _level = level;
-            _mode = mode;
           });
         },
       );
     }
-    return _mode == GameMode.adventure
-        ? AdventurePage(
-            region: _region!,
-            level: _level!,
-            isEnglish: false,
-            onLanguageChanged: () {},
-            onBack: () => setState(() => _region = null),
-            onFinished: (_) => setState(() => _region = null),
-          )
-        : GamePage(
-            region: _region!,
-            level: _level!,
-            isEnglish: false,
-            onLanguageChanged: () {},
-            onBack: () => setState(() => _region = null),
-            onFinished: (_) => setState(() => _region = null),
-          );
+    return GamePage(
+      region: _region!,
+      level: _level!,
+      isEnglish: false,
+      onLanguageChanged: () {},
+      onBack: () => setState(() => _region = null),
+      onFinished: (_) => setState(() => _region = null),
+    );
   }
 }
 
@@ -124,21 +109,19 @@ class PreviewApp extends StatelessWidget {
         int.tryParse(uri.queryParameters['l'] ?? '')?.clamp(0, 2) ?? 0;
     final double? fx = double.tryParse(uri.queryParameters['fx'] ?? '');
     final String mode = uri.queryParameters['mode'] ?? 'logic';
-    final bool fight = uri.queryParameters['fight'] == '1';
-    final bool dlg = uri.queryParameters['dlg'] == '1';
 
     // Pratinjau halaman Statistik: isi beberapa bintang contoh agar
     // terlihat hidup (hanya berlaku di tool pratinjau).
     if (mode == 'stats') {
-      MapProgress.setStars(0, 0, GameMode.adventure, 3);
-      MapProgress.setStars(0, 1, GameMode.logic, 2);
-      MapProgress.setStars(1, 0, GameMode.adventure, 1);
-      MapProgress.setStars(1, 0, GameMode.logic, 3);
-      MapProgress.setStars(2, 0, GameMode.logic, 2);
+      MapProgress.setStars(0, 0, 3);
+      MapProgress.setStars(0, 1, 2);
+      MapProgress.setStars(1, 0, 1);
+      MapProgress.setStars(1, 1, 3);
+      MapProgress.setStars(2, 0, 2);
     }
 
-    // Pratinjau: anggap cerita sudah dibaca agar dialog pilih mode
-    // langsung terbuka (tidak terhalang dialog cerita).
+    // Pratinjau: anggap cerita sudah dibaca agar dialog tidak
+    // menghalangi peta.
     if (uri.queryParameters['seen'] == '1') {
       for (var r = 0; r < MapProgress.regionCount; r++) {
         MapProgress.storySeen[r] = true;
@@ -146,7 +129,7 @@ class PreviewApp extends StatelessWidget {
     }
 
     final Widget page = mode == 'map'
-        ? MapPreview(openDialog: dlg)
+        ? const MapPreview()
         : mode == 'stats'
         ? StatisticsPage(isEnglish: false, onLanguageChanged: () {})
         : mode == 'settings'
@@ -155,16 +138,6 @@ class PreviewApp extends StatelessWidget {
         ? DialogPreview(quiz: true, region: region, level: level)
         : mode == 'npc'
         ? DialogPreview(quiz: false, region: region, level: level)
-        : mode == 'adventure'
-        ? AdventurePage(
-            region: region,
-            level: level,
-            isEnglish: false,
-            onLanguageChanged: () {},
-            onBack: () {},
-            onFinished: (_) {},
-            debugStartFight: fight,
-          )
         : GamePage(
             region: region,
             level: level,

@@ -19,6 +19,7 @@ import 'map_page.dart';
 //   3. Tekan JALANKAN (RUN CODE) -> karakter bergerak.
 //   4. Kalahkan monster -> lanjut menjawab soal (tahap berikutnya).
 
+
 // ---------- Palet warna ----------
 const Color _kBg = Color(0xFF0B100F);
 const Color _kCard = Color(0xFF141A19);
@@ -231,9 +232,8 @@ class _GamePageState extends State<GamePage>
   }
 
   Future<void> _showVictory(int stars) async {
-    if (stars >
-        MapProgress.starsOf(widget.region, widget.level, GameMode.logic)) {
-      MapProgress.setStars(widget.region, widget.level, GameMode.logic, stars);
+    if (stars > MapProgress.starsOf(widget.region, widget.level)) {
+      MapProgress.setStars(widget.region, widget.level, stars);
     }
 
     Juice.victory();
@@ -323,11 +323,7 @@ class _GamePageState extends State<GamePage>
   // ---------- Banner level + HP monster ----------
   Widget _levelBanner() {
     final GameRegion region = gameRegions[widget.region.clamp(0, 4)];
-    final int stars = MapProgress.starsOf(
-      widget.region,
-      widget.level,
-      GameMode.logic,
-    );
+    final int stars = MapProgress.starsOf(widget.region, widget.level);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -628,8 +624,7 @@ class _GamePageState extends State<GamePage>
   }
 
   /// Karakter pemain (bentuk orang, bukan kursor) + penunjuk arah hadap.
-  /// Memakai widget bersama [HeroToken] agar konsisten dengan Mode
-  /// Petualangan.
+  /// Memakai widget bersama [HeroToken].
   Widget _heroToken(double size) {
     return HeroToken(size: size, facing: _engine.dir);
   }

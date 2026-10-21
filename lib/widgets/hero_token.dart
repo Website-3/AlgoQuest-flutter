@@ -9,8 +9,7 @@ import 'package:flutter/material.dart';
 // helm, mata, badan, lengan, kaki, dan pedang. Ada juga panah
 // arah hadap ("") di lantai yang ikut berputar sesuai arah
 // karakter menghadap (0 = atas, 1 = kanan, 2 = bawah, 3 = kiri).
-// Widget ini dipakai bersama oleh Mode Petualangan dan
-// Mode Arena Logika supaya tampilannya konsisten.
+// Widget ini dipakai oleh Arena Logika agar tampilannya konsisten.
 
 const Color _kCyan = Color(0xFF42CFFF);
 

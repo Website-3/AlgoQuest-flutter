@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 // ============================================================
 // Digambar penuh dengan kode (bukan ikon) supaya bergaya satu dengan
 // [HeroToken]: badan bergradasi + garis tepi, tanduk, mata marah, dan
-// mulut bergigi. Dipakai bersama Mode Petualangan & Arena Logika.
+// mulut bergigi. Dipakai di Arena Logika.
 
 class MonsterToken extends StatelessWidget {
   const MonsterToken({

@@ -63,6 +63,8 @@ flutter:
   assets:
     - assets/images/logo_algoquest.png
     - assets/images/logo_npc.png
+    - assets/images/hero.png
+    - assets/images/monster.png
     - assets/audio/
 
   fonts:

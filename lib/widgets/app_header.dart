@@ -13,12 +13,17 @@ class AppHeader extends StatelessWidget {
   /// supaya papaan belakang dipaparkan menggantikan logo.
   final VoidCallback? onBack;
 
+  /// Versi ringkas: padding & judul lebih kecil agar halaman
+  /// permainan punya lebih banyak ruang untuk arena.
+  final bool compact;
+
   const AppHeader({
     super.key,
     required this.title,
     required this.isEnglish,
     required this.onLanguageChanged,
     this.onBack,
+    this.compact = false,
   });
 
   @override
@@ -26,7 +31,9 @@ class AppHeader extends StatelessWidget {
     return SafeArea(
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        padding: compact
+            ? const EdgeInsets.fromLTRB(14, 4, 14, 4)
+            : const EdgeInsets.fromLTRB(20, 12, 20, 12),
         child: Row(
           children: [
             // BACK (halaman sub) / LOGO
@@ -69,10 +76,10 @@ class AppHeader extends StatelessWidget {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 28,
+                style: TextStyle(
+                  fontSize: compact ? 22 : 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFDDE7E9),
+                  color: const Color(0xFFDDE7E9),
                 ),
               ),
             ),

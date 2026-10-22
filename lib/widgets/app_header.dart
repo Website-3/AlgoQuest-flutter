@@ -47,10 +47,7 @@ class AppHeader extends StatelessWidget {
                   color: Colors.white,
                 ),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 42,
-                  minHeight: 42,
-                ),
+                constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
               )
             else
               Container(

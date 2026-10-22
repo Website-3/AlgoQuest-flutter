@@ -16,11 +16,15 @@ class SettingsPage extends StatefulWidget {
   /// Dipanggil saat tombol "Keluar" ditekan (logout dari sesi).
   final VoidCallback? onLogout;
 
+  /// Kembali ke halaman sebelumnya jika dibuka sebagai sub-halaman.
+  final VoidCallback? onBack;
+
   const SettingsPage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
     this.onLogout,
+    this.onBack,
   });
 
   @override
@@ -42,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
               title: 'Settings',
               isEnglish: widget.isEnglish,
               onLanguageChanged: widget.onLanguageChanged,
+              onBack: widget.onBack,
             ),
 
             Expanded(
@@ -327,4 +332,3 @@ class _LanguageChip extends StatelessWidget {
     );
   }
 }
-

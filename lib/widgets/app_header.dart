@@ -9,12 +9,13 @@ class AppHeader extends StatelessWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
 
-  /// Diberi nilainya hanya pada halaman sub (Map & Learn)
-  /// supaya papaan belakang dipaparkan menggantikan logo.
+  // BACK untuk halaman sub
   final VoidCallback? onBack;
 
-  /// Versi ringkas: padding & judul lebih kecil agar halaman
-  /// permainan punya lebih banyak ruang untuk arena.
+  // SETTINGS
+  final VoidCallback? onSettingsPressed;
+
+  // Header ringkas untuk halaman permainan
   final bool compact;
 
   const AppHeader({
@@ -23,6 +24,7 @@ class AppHeader extends StatelessWidget {
     required this.isEnglish,
     required this.onLanguageChanged,
     this.onBack,
+    this.onSettingsPressed,
     this.compact = false,
   });
 
@@ -36,11 +38,14 @@ class AppHeader extends StatelessWidget {
             : const EdgeInsets.fromLTRB(20, 12, 20, 12),
         child: Row(
           children: [
-            // BACK (halaman sub) / LOGO
+            // BACK / LOGO
             if (onBack != null)
               IconButton(
                 onPressed: onBack,
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
               )
@@ -107,7 +112,9 @@ class AppHeader extends StatelessWidget {
                       child: Text(
                         'ID',
                         style: TextStyle(
-                          color: !isEnglish ? Colors.black : Colors.white70,
+                          color: !isEnglish
+                              ? Colors.black
+                              : Colors.white70,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -125,7 +132,9 @@ class AppHeader extends StatelessWidget {
                       child: Text(
                         'EN',
                         style: TextStyle(
-                          color: isEnglish ? Colors.black : Colors.white70,
+                          color: isEnglish
+                              ? Colors.black
+                              : Colors.white70,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -135,30 +144,23 @@ class AppHeader extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(width: 12),
-
-            // ENERGY
-            Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
+            // SETTINGS
+            if (onSettingsPressed != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: onSettingsPressed,
+                tooltip: isEnglish ? 'Settings' : 'Pengaturan',
+                icon: const Icon(
+                  Icons.settings_outlined,
+                  color: Colors.white,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 38,
+                  minHeight: 38,
+                ),
               ),
-              child: const Row(
-                children: [
-                  Text('⚡', style: TextStyle(fontSize: 17)),
-                  SizedBox(width: 4),
-                  Text(
-                    '42',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ],
         ),
       ),

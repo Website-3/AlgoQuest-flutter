@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 // ============================================================
 // MONSTER TOKEN â€” IBLIS BERTANDUK (memakai gambar PNG)
@@ -93,8 +93,9 @@ class MonsterToken extends StatelessWidget {
         height: size,
         child: Stack(
           alignment: Alignment.center,
+          clipBehavior: Clip.none,
           children: <Widget>[
-            // Cahaya api + bayangan lantai
+            // Cahaya api + bayangan lantai + cincin merah
             Positioned.fill(
               child: CustomPaint(painter: _GroundPainter(defeated: defeated)),
             ),
@@ -109,6 +110,36 @@ class MonsterToken extends StatelessWidget {
                 ),
               ),
             ),
+            // Tanda seru (!) merah di atas kepala monster (seperti di referensi RPG)
+            if (!defeated)
+              Positioned(
+                top: -size * 0.16,
+                child: Container(
+                  width: size * 0.22,
+                  height: size * 0.22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF2A3C),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF2A3C).withValues(alpha: 0.75),
+                        blurRadius: 8,
+                      ),
+                    ],
+                    border: Border.all(color: Colors.white, width: 1.2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: size * 0.14,
+                      fontWeight: FontWeight.w900,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
             // Mata X saat kalah
             if (defeated && _kShowDeadEyes)
               const Positioned.fill(
@@ -148,6 +179,35 @@ class _GroundPainter extends CustomPainter {
               _kAura.withValues(alpha: 0.0),
             ],
           ).createShader(Rect.fromCircle(center: c, radius: w * 0.5)),
+      );
+    }
+
+    // Cincin lantai merah bercahaya (seperti di referensi RPG)
+    if (!defeated) {
+      final Offset ringCenter = Offset(w * 0.5, h * 0.92);
+      final Rect ringRect = Rect.fromCenter(
+        center: ringCenter,
+        width: w * 0.72,
+        height: w * 0.28,
+      );
+      // Glow cincin luar
+      canvas.drawOval(
+        ringRect,
+        Paint()
+          ..color = const Color(0xFFFF2A3C).withValues(alpha: 0.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.04
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, w * 0.035)
+          ..isAntiAlias = true,
+      );
+      // Garis cincin tajam
+      canvas.drawOval(
+        ringRect,
+        Paint()
+          ..color = const Color(0xFFFF3B4E).withValues(alpha: 0.95)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.025
+          ..isAntiAlias = true,
       );
     }
 

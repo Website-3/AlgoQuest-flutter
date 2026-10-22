@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -132,28 +132,31 @@ class _GroundPainter extends CustomPainter {
         ).createShader(Rect.fromCircle(center: c, radius: s * 0.42)),
     );
 
-    // bayangan lantai (berlapis)
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(s * 0.5, s * 0.94),
-        width: s * 0.74,
-        height: s * 0.17,
-      ),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.30)
-        ..isAntiAlias = true
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.035),
+    // Cincin lantai cyan bercahaya (seperti di referensi RPG)
+    final Offset ringCenter = Offset(s * 0.5, s * 0.92);
+    final Rect ringRect = Rect.fromCenter(
+      center: ringCenter,
+      width: s * 0.72,
+      height: s * 0.28,
     );
+    // Glow cincin luar
     canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(s * 0.5, s * 0.935),
-        width: s * 0.48,
-        height: s * 0.09,
-      ),
+      ringRect,
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.45)
-        ..isAntiAlias = true
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.02),
+        ..color = _kCyan.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.04
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.035)
+        ..isAntiAlias = true,
+    );
+    // Garis cincin tajam
+    canvas.drawOval(
+      ringRect,
+      Paint()
+        ..color = _kCyan.withValues(alpha: 0.95)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.025
+        ..isAntiAlias = true,
     );
   }
 

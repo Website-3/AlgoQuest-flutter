@@ -42,10 +42,7 @@ class AppHeader extends StatelessWidget {
                 onPressed: onBack,
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 42,
-                  minHeight: 42,
-                ),
+                constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
               )
             else
               Container(
@@ -168,4 +165,3 @@ class AppHeader extends StatelessWidget {
     );
   }
 }
-

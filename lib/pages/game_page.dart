@@ -21,7 +21,6 @@ import 'map_page.dart';
 
 // ---------- Palet Warna Fantasy RPG ----------
 const Color _kBg = Color(0xFF070F14);
-const Color _kPanelBg = Color(0xFF0B1723);
 const Color _kPanelBgAlt = Color(0xFF0E1F2E);
 const Color _kBorderGold = Color(0xFFC89738);
 const Color _kBorderBlue = Color(0xFF1E3A52);
@@ -30,7 +29,6 @@ const Color _kGold = Color(0xFFFFC043);
 const Color _kOrange = Color(0xFFFF7A29);
 const Color _kCrimson = Color(0xFFFF3856);
 const Color _kGreen = Color(0xFF4ADE80);
-const Color _kText = Color(0xFFEDF5F7);
 const Color _kMuted = Color(0xFF8CA0B3);
 
 class GamePage extends StatefulWidget {
@@ -237,26 +235,19 @@ class _GamePageState extends State<GamePage>
     Juice.victory();
     Juice.star();
 
-    final bool? next = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext ctx) => _victoryDialog(ctx, stars),
+    // Alur baru: Langsung tampilkan kuis khusus level setelah monster dikalahkan
+    final bool completed = await showQuizDialog(
+      context,
+      region: widget.region,
+      level: widget.level,
+      isEnglish: _en,
     );
 
     if (!mounted) return;
-    if (next == true) {
-      final bool correct = await showQuizDialog(
-        context,
-        region: widget.region,
-        level: widget.level,
-        isEnglish: _en,
-      );
-      if (!mounted) return;
-      if (correct) MapProgress.markQuizCorrect(widget.region, widget.level);
-      widget.onFinished?.call(stars);
-    } else {
-      setState(() => _engine.reset());
+    if (completed) {
+      MapProgress.markQuizCorrect(widget.region, widget.level);
     }
+    widget.onFinished?.call(stars);
   }
 
   void _toast(String message) {
@@ -1510,184 +1501,6 @@ class _GamePageState extends State<GamePage>
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================================
-  // DIALOG KEMENANGAN (POPUP RPG)
-  // ==========================================================
-  Widget _victoryDialog(BuildContext ctx, int stars) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: <Color>[Color(0xFF132537), Color(0xFF0C1722)],
-          ),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: _kBorderGold, width: 1.8),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.8),
-              blurRadius: 24,
-            ),
-            BoxShadow(
-              color: _kBorderGold.withValues(alpha: 0.25),
-              blurRadius: 20,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            // Piala / Bintang Kemenangan Emas
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2411),
-                shape: BoxShape.circle,
-                border: Border.all(color: _kGold, width: 1.5),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: _kGold.withValues(alpha: 0.45),
-                    blurRadius: 18,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.emoji_events_rounded,
-                color: _kGold,
-                size: 38,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            Text(
-              _en ? 'MONSTER DEFEATED!' : 'MONSTER DIKALAHKAN!',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _level.monsterName(_en),
-              style: const TextStyle(color: _kMuted, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-
-            // 3 Bintang Emas Berkilau
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List<Widget>.generate(
-                3,
-                (int i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Icon(
-                    i < stars ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: i < stars ? _kGold : const Color(0xFF334155),
-                    size: 38,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Perbandingan Langkah & Par
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                _statPill(_en ? 'Steps' : 'Langkah', '${_engine.steps}'),
-                const SizedBox(width: 10),
-                _statPill('Par', '${_level.par}'),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // Tombol Ulangi & Lanjut
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Juice.click();
-                      Navigator.of(ctx).pop(false);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _kText,
-                      side: const BorderSide(color: Color(0xFF2E465D)),
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(_en ? 'Retry' : 'Ulangi'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Juice.click();
-                      Navigator.of(ctx).pop(true);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF9E0B),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 6,
-                    ),
-                    child: Text(
-                      _en ? 'Next \u25B8' : 'Lanjut \u25B8',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _statPill(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F1E2C),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF243E56)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(label, style: const TextStyle(color: _kMuted, fontSize: 12)),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
             ),
           ),
         ],

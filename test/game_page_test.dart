@@ -105,22 +105,17 @@ void main() {
     await tester.ensureVisible(run);
     await tester.tap(run);
 
-    // Dorong timer sampai semua perintah selesai dieksekusi.
+    // Dorong timer sampai semua perintah selesai dieksekusi dan kuis muncul.
     for (
       var i = 0;
-      i < 400 && find.text('MONSTER DIKALAHKAN!').evaluate().isEmpty;
+      i < 400 && find.text('Monster Dikalahkan!').evaluate().isEmpty;
       i++
     ) {
       await tester.pump(const Duration(milliseconds: 250));
     }
 
-    expect(find.text('MONSTER DIKALAHKAN!'), findsOneWidget);
-
-    // Lanjut -> soal logika asli muncul (dulu hanya placeholder).
-    await tester.tap(find.text('Lanjut \u25B8'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('SOAL LOGIKA'), findsOneWidget);
+    expect(find.text('Monster Dikalahkan!'), findsOneWidget);
+    expect(find.text('Soal 1/5'), findsOneWidget);
   });
 
   testWidgets('arena mengisi hampir seluruh lebar layar ponsel', (

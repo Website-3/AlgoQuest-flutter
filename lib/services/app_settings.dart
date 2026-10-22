@@ -11,6 +11,7 @@ import 'juice.dart';
 class AppSettings {
   AppSettings._();
 
+  static const String _kBgm = 'pref_bgm_enabled';
   static const String _kSound = 'pref_sound_enabled';
   static const String _kHaptics = 'pref_haptics_enabled';
 
@@ -20,11 +21,32 @@ class AppSettings {
   static Future<void> load() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final bool bgmOn = prefs.getBool(_kBgm) ?? true;
+      GameAudio.instance.bgmEnabled = bgmOn;
+      if (bgmOn) {
+        GameAudio.instance.startBgm();
+      }
       GameAudio.instance.enabled = prefs.getBool(_kSound) ?? true;
       Juice.hapticsEnabled = prefs.getBool(_kHaptics) ?? true;
       revision.value++;
     } catch (_) {
       // diabaikan: pakai nilai bawaan
+    }
+  }
+
+  static Future<void> setBgm(bool value) async {
+    GameAudio.instance.bgmEnabled = value;
+    if (value) {
+      GameAudio.instance.startBgm();
+    } else {
+      GameAudio.instance.stopBgm();
+    }
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kBgm, value);
+    } catch (_) {
+      // diabaikan
     }
   }
 

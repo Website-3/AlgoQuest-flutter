@@ -5,7 +5,7 @@ import '../widgets/stat_card.dart';
 import 'map_page.dart';
 
 // ============================================================
-// STATISTICS PAGE — DATA ASLI DARI PROGRES PEMAIN
+// STATISTIC PAGE — DATA ASLI DARI PROGRES PEMAIN
 // ============================================================
 // Semua angka di halaman ini dihitung dari MapProgress (bintang
 // yang benar-benar diraih pemain), bukan angka contoh.
@@ -43,283 +43,306 @@ class StatisticsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF101414),
       body: SafeArea(
-        child: Column(
-          children: [
-            AppHeader(
-              title: 'Statistics',
-              isEnglish: isEnglish,
-              onLanguageChanged: onLanguageChanged,
-            ),
-            Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: MapProgress.revision,
-                builder: (BuildContext context, int value, Widget? child) =>
-                    _body(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+        child: ValueListenableBuilder<int>(
+          valueListenable: MapProgress.revision,
+          builder: (BuildContext context, int value, Widget? child) {
+            final int total = MapProgress.totalStars();
+            final int maxTotal = MapProgress.maxTotalStars();
+            final int completed = MapProgress.completedLevels();
+            final int readyRegions = MapProgress.readyRegions();
+            final int unlockedRegions = List<int>.generate(
+              MapProgress.regionCount,
+              (int r) => r,
+            ).where(MapProgress.isRegionUnlocked).length;
 
-  Widget _body() {
-    final int total = MapProgress.totalStars();
-    final int maxTotal = MapProgress.maxTotalStars();
-    final int completed = MapProgress.completedLevels();
-    final int readyRegions = MapProgress.readyRegions();
-    final int unlockedRegions = List<int>.generate(
-      MapProgress.regionCount,
-      (int r) => r,
-    ).where(MapProgress.isRegionUnlocked).length;
+            // Level & XP diturunkan dari bintang (3 bintang = 1 level).
+            final int level = 1 + total ~/ 3;
+            final int intoLevel = total % 3;
+            final double levelProgress = intoLevel / 3;
+            final int xp = total * 100;
+            final int neededStars = 3 - intoLevel;
 
-    // Level & XP diturunkan dari bintang (3 bintang = 1 level).
-    final int level = 1 + total ~/ 3;
-    final int intoLevel = total % 3;
-    final double levelProgress = intoLevel / 3;
-    final int xp = total * 100;
+            final int percent =
+                maxTotal == 0 ? 0 : (total / maxTotal * 100).round();
 
-    final int percent = maxTotal == 0 ? 0 : (total / maxTotal * 100).round();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 25),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // KARTU LEVEL & XP
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0B4E5C), Color(0xFF08A9C8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
+            return Column(
               children: [
-                Container(
-                  width: 66,
-                  height: 66,
-                  decoration: const BoxDecoration(
-                    color: Colors.white24,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.emoji_events,
-                    size: 36,
-                    color: Color(0xFFFFC15C),
-                  ),
+                AppHeader(
+                  title: 'Statistic',
+                  isEnglish: isEnglish,
+                  onLanguageChanged: onLanguageChanged,
                 ),
-                const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_en ? 'Level' : 'Level'} $level',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        _rank(total),
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: LinearProgressIndicator(
-                                value: levelProgress,
-                                minHeight: 8,
-                                backgroundColor: const Color(0x66000000),
-                                valueColor: const AlwaysStoppedAnimation(
-                                  Color(0xFFFFC15C),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 25),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // KARTU LEVEL & XP
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF0B4E5C), Color(0xFF08A9C8)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 66,
+                                height: 66,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white24,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.emoji_events,
+                                  size: 36,
+                                  color: Color(0xFFFFC15C),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${_en ? 'Level' : 'Level'} $level',
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      _rank(total),
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            child: LinearProgressIndicator(
+                                              value: levelProgress,
+                                              minHeight: 8,
+                                              backgroundColor:
+                                                  const Color(0x66000000),
+                                              valueColor:
+                                                  const AlwaysStoppedAnimation(
+                                                Color(0xFFFFC15C),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          '$xp XP',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _en
+                                          ? '$neededStars star${neededStars > 1 ? 's' : ''} to next level'
+                                          : '$neededStars bintang lagi menuju level berikutnya',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '$xp XP',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // GRID STATISTIK
+                        Row(
+                          children: [
+                            Expanded(
+                              child: StatCard(
+                                icon: Icons.star_rounded,
+                                iconColor: const Color(0xFFFFC15C),
+                                value: '$total/$maxTotal',
+                                label: _en
+                                    ? 'Stars Earned'
+                                    : 'Bintang Diperoleh',
+                              ),
                             ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: StatCard(
+                                icon: Icons.check_circle,
+                                iconColor: const Color(0xFF4DD7F7),
+                                value:
+                                    '$completed/${MapProgress.totalLevels}',
+                                label: _en
+                                    ? 'Levels Cleared'
+                                    : 'Level Selesai',
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: StatCard(
+                                icon: Icons.quiz_rounded,
+                                iconColor: const Color(0xFF4DD7F7),
+                                value:
+                                    '${MapProgress.quizCorrectCount()}/${MapProgress.totalLevels}',
+                                label:
+                                    _en ? 'Quizzes Correct' : 'Soal Benar',
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: StatCard(
+                                icon: Icons.flag_rounded,
+                                iconColor: const Color(0xFF59C36A),
+                                value:
+                                    '$readyRegions/${MapProgress.regionCount}',
+                                label: _en
+                                    ? 'Regions Cleared'
+                                    : 'Wilayah Tuntas',
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // PROGRES WILAYAH
+                        Text(
+                          _en ? 'REGION PROGRESS' : 'PROGRES WILAYAH',
+                          style: const TextStyle(
+                            letterSpacing: 2,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white70,
                           ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        for (
+                          int r = 0;
+                          r < MapProgress.regionCount;
+                          r++
+                        ) ...[
+                          _ProgressRow(
+                            label: _regionLabel(r),
+                            value: MapProgress.regionStars(r) /
+                                (MapProgress.levelsPerRegion *
+                                    MapProgress.maxStars),
+                            progressText:
+                                '${MapProgress.regionStars(r)}/${MapProgress.levelsPerRegion * MapProgress.maxStars}',
+                            color: gameRegions[r].color,
+                          ),
+                          if (r < MapProgress.regionCount - 1)
+                            const SizedBox(height: 12),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _en
-                            ? '$intoLevel/3 stars to next level'
-                            : '$intoLevel/3 bintang menuju level berikutnya',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
+
+                        const SizedBox(height: 28),
+
+                        // RINGKASAN KOLEKSI BINTANG
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF202524),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF064A50),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.military_tech,
+                                  color: Color(0xFF8DE7F5),
+                                  size: 30,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _en
+                                          ? 'Star Collection'
+                                          : 'Koleksi Bintang',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _en
+                                          ? '$total of $maxTotal stars collected'
+                                          : '$total dari $maxTotal bintang terkumpul',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _en
+                                          ? '$unlockedRegions regions unlocked · $readyRegions completed'
+                                          : '$unlockedRegions wilayah terbuka · $readyRegions tuntas',
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '$percent%',
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4DD7F7),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // GRID STATISTIK
-          Row(
-            children: [
-              Expanded(
-                child: StatCard(
-                  icon: Icons.star_rounded,
-                  iconColor: const Color(0xFFFFC15C),
-                  value: '$total/$maxTotal',
-                  label: _en ? 'Stars Earned' : 'Bintang Diperoleh',
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: StatCard(
-                  icon: Icons.check_circle,
-                  iconColor: const Color(0xFF4DD7F7),
-                  value: '$completed/${MapProgress.totalLevels}',
-                  label: _en ? 'Levels Cleared' : 'Level Selesai',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          Row(
-            children: [
-              Expanded(
-                child: StatCard(
-                  icon: Icons.quiz_rounded,
-                  iconColor: const Color(0xFF4DD7F7),
-                  value:
-                      '${MapProgress.quizCorrectCount()}/${MapProgress.totalLevels}',
-                  label: _en ? 'Quizzes Correct' : 'Soal Benar',
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: StatCard(
-                  icon: Icons.flag_rounded,
-                  iconColor: const Color(0xFF59C36A),
-                  value: '$readyRegions/${MapProgress.regionCount}',
-                  label: _en ? 'Regions Cleared' : 'Wilayah Tuntas',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          // PROGRES WILAYAH
-          Text(
-            _en ? 'REGION PROGRESS' : 'PROGRES WILAYAH',
-            style: const TextStyle(
-              letterSpacing: 2,
-              fontWeight: FontWeight.bold,
-              color: Colors.white70,
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          for (int r = 0; r < MapProgress.regionCount; r++) ...[
-            _ProgressRow(
-              label: '${r + 1}. ${_regionLabel(r)}',
-              value: MapProgress.regionStars(r) /
-                  (MapProgress.levelsPerRegion * MapProgress.maxStars),
-              progressText:
-                  '${MapProgress.regionStars(r)}/${MapProgress.levelsPerRegion * MapProgress.maxStars}',
-              color: gameRegions[r].color,
-            ),
-            if (r < MapProgress.regionCount - 1) const SizedBox(height: 12),
-          ],
-
-          const SizedBox(height: 28),
-
-          // RINGKASAN KOLEKSI BINTANG
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF202524),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF064A50),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.military_tech,
-                    color: Color(0xFF8DE7F5),
-                    size: 30,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _en ? 'Star Collection' : 'Koleksi Bintang',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _en
-                            ? '$total of $maxTotal stars collected'
-                            : '$total daripada $maxTotal bintang terkumpul',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _en
-                            ? '$unlockedRegions regions unlocked · $readyRegions completed'
-                            : '$unlockedRegions wilayah terbuka · $readyRegions tuntas',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '$percent%',
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4DD7F7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -348,7 +371,7 @@ class _ProgressRow extends StatelessWidget {
             label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ),
         const SizedBox(width: 10),

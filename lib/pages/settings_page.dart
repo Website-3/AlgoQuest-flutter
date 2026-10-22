@@ -16,11 +16,15 @@ class SettingsPage extends StatefulWidget {
   /// Dipanggil saat tombol "Keluar" ditekan (logout dari sesi).
   final VoidCallback? onLogout;
 
+  /// Kembali ke halaman sebelumnya jika dibuka sebagai sub-halaman.
+  final VoidCallback? onBack;
+
   const SettingsPage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
     this.onLogout,
+    this.onBack,
   });
 
   @override
@@ -28,6 +32,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  bool bgmOn = GameAudio.instance.bgmEnabled;
   bool soundOn = GameAudio.instance.enabled;
   bool hapticsOn = Juice.hapticsEnabled;
 
@@ -42,6 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
               title: 'Settings',
               isEnglish: widget.isEnglish,
               onLanguageChanged: widget.onLanguageChanged,
+              onBack: widget.onBack,
             ),
 
             Expanded(
@@ -109,6 +115,19 @@ class _SettingsPageState extends State<SettingsPage> {
                     SettingsCard(
                       child: Column(
                         children: [
+                          _SwitchTile(
+                            icon: Icons.music_note_rounded,
+                            title: widget.isEnglish
+                                ? 'Sound'
+                                : 'Musik Pengiring',
+                            value: bgmOn,
+                            onChanged: (v) {
+                              setState(() => bgmOn = v);
+                              AppSettings.setBgm(v);
+                              if (v) Juice.click();
+                            },
+                          ),
+                          const Divider(color: Colors.white10, height: 1),
                           _SwitchTile(
                             icon: Icons.volume_up_outlined,
                             title: widget.isEnglish
@@ -327,4 +346,3 @@ class _LanguageChip extends StatelessWidget {
     );
   }
 }
-

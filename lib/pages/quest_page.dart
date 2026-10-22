@@ -9,14 +9,20 @@ class QuestPage extends StatelessWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
   final VoidCallback onStartPressed;
+  final VoidCallback onPanduanPressed;
   final VoidCallback onMateriPressed;
+
+  // SETTINGS
+  final VoidCallback onSettingsPressed;
 
   const QuestPage({
     super.key,
     required this.isEnglish,
     required this.onLanguageChanged,
     required this.onStartPressed,
+    required this.onPanduanPressed,
     required this.onMateriPressed,
+    required this.onSettingsPressed,
   });
 
   @override
@@ -30,6 +36,9 @@ class QuestPage extends StatelessWidget {
               title: 'Quest',
               isEnglish: isEnglish,
               onLanguageChanged: onLanguageChanged,
+
+              // SETTINGS -> HALAMAN PENGATURAN
+              onSettingsPressed: onSettingsPressed,
             ),
 
             Expanded(
@@ -63,6 +72,7 @@ class QuestPage extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
+                    // NAMA GAME
                     const Text(
                       'AlgoQuest',
                       style: TextStyle(
@@ -74,6 +84,7 @@ class QuestPage extends StatelessWidget {
 
                     const SizedBox(height: 5),
 
+                    // SUBTITLE
                     Text(
                       isEnglish ? 'LOGIC ADVENTURE' : 'PETUALANGAN LOGIKA',
                       style: const TextStyle(
@@ -85,7 +96,9 @@ class QuestPage extends StatelessWidget {
 
                     const SizedBox(height: 35),
 
-                    // MULAI
+                    // ==================================================
+                    // TOMBOL MULAI
+                    // ==================================================
                     SizedBox(
                       width: double.infinity,
                       height: 55,
@@ -117,12 +130,14 @@ class QuestPage extends StatelessWidget {
 
                     const SizedBox(height: 14),
 
-                    // MATERI
+                    // ==================================================
+                    // TOMBOL PANDUAN PERMAINAN
+                    // ==================================================
                     SizedBox(
                       width: double.infinity,
                       height: 55,
                       child: ElevatedButton(
-                        onPressed: onMateriPressed,
+                        onPressed: onPanduanPressed,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF08A9C8),
                           foregroundColor: Colors.black,
@@ -136,7 +151,9 @@ class QuestPage extends StatelessWidget {
                             const Icon(Icons.menu_book),
                             const SizedBox(width: 5),
                             Text(
-                              isEnglish ? 'Learn' : 'Materi',
+                              isEnglish
+                                  ? 'Game Guide'
+                                  : 'Panduan Permainan',
                               style: const TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.bold,
@@ -158,4 +175,3 @@ class QuestPage extends StatelessWidget {
     );
   }
 }
-

@@ -19,6 +19,7 @@ import 'map_page.dart';
 //   3. Tekan JALANKAN (RUN CODE) -> karakter bergerak.
 //   4. Kalahkan monster -> lanjut menjawab soal (tahap berikutnya).
 
+
 // ---------- Palet warna ----------
 const Color _kBg = Color(0xFF0B100F);
 const Color _kCard = Color(0xFF141A19);
@@ -231,9 +232,8 @@ class _GamePageState extends State<GamePage>
   }
 
   Future<void> _showVictory(int stars) async {
-    if (stars >
-        MapProgress.starsOf(widget.region, widget.level, GameMode.logic)) {
-      MapProgress.setStars(widget.region, widget.level, GameMode.logic, stars);
+    if (stars > MapProgress.starsOf(widget.region, widget.level)) {
+      MapProgress.setStars(widget.region, widget.level, stars);
     }
 
     Juice.victory();
@@ -289,24 +289,25 @@ class _GamePageState extends State<GamePage>
               isEnglish: _en,
               onLanguageChanged: widget.onLanguageChanged,
               onBack: widget.onBack,
+              compact: true,
             ),
             Expanded(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                  constraints: const BoxConstraints(maxWidth: 640),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         _levelBanner(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         Expanded(child: _mazeArena()),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         _logicSequence(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         _commandsPalette(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         _runButtons(),
                       ],
                     ),
@@ -323,14 +324,10 @@ class _GamePageState extends State<GamePage>
   // ---------- Banner level + HP monster ----------
   Widget _levelBanner() {
     final GameRegion region = gameRegions[widget.region.clamp(0, 4)];
-    final int stars = MapProgress.starsOf(
-      widget.region,
-      widget.level,
-      GameMode.logic,
-    );
+    final int stars = MapProgress.starsOf(widget.region, widget.level);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,8 +335,8 @@ class _GamePageState extends State<GamePage>
           Row(
             children: <Widget>[
               Container(
-                width: 34,
-                height: 34,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: region.color.withValues(alpha: 0.16),
                   shape: BoxShape.circle,
@@ -447,10 +444,11 @@ class _GamePageState extends State<GamePage>
         );
         return Center(
           child: SizedBox(
+            key: const ValueKey<String>('maze_arena'),
             width: side,
             height: side,
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(4),
               decoration: _cardDecoration(),
               child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints inner) {
@@ -628,8 +626,7 @@ class _GamePageState extends State<GamePage>
   }
 
   /// Karakter pemain (bentuk orang, bukan kursor) + penunjuk arah hadap.
-  /// Memakai widget bersama [HeroToken] agar konsisten dengan Mode
-  /// Petualangan.
+  /// Memakai widget bersama [HeroToken].
   Widget _heroToken(double size) {
     return HeroToken(size: size, facing: _engine.dir);
   }
@@ -717,9 +714,9 @@ class _GamePageState extends State<GamePage>
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           SizedBox(
-            height: 60,
+            height: 42,
             child: _blocks.isEmpty
                 ? _dropZone()
                 : SingleChildScrollView(child: _blockList()),
@@ -736,7 +733,7 @@ class _GamePageState extends State<GamePage>
       painter: _DashedBorderPainter(color: _kLine, radius: 12, dash: 6, gap: 5),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         alignment: Alignment.center,
         child: Text(
           _en
@@ -865,7 +862,7 @@ class _GamePageState extends State<GamePage>
             letterSpacing: 1,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           children: <Widget>[
             Expanded(child: _commandButton(GameCommand.forward)),
@@ -889,7 +886,7 @@ class _GamePageState extends State<GamePage>
       onTap: enabled ? () => _addBlock(command) : null,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: enabled ? 0.16 : 0.06),
           border: Border.all(
@@ -902,9 +899,9 @@ class _GamePageState extends State<GamePage>
             Icon(
               _commandIcon(command),
               color: enabled ? color : color.withValues(alpha: 0.4),
-              size: 20,
+              size: 18,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               command.pill(_en),
               textAlign: TextAlign.center,
@@ -934,7 +931,7 @@ class _GamePageState extends State<GamePage>
             style: OutlinedButton.styleFrom(
               foregroundColor: _kMuted,
               side: const BorderSide(color: _kLine),
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 11),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -968,7 +965,7 @@ class _GamePageState extends State<GamePage>
                 onTap: _running ? null : _run,
                 borderRadius: BorderRadius.circular(14),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
@@ -977,7 +974,7 @@ class _GamePageState extends State<GamePage>
                             ? Icons.hourglass_top_rounded
                             : Icons.play_arrow_rounded,
                         color: Colors.black,
-                        size: 22,
+                        size: 20,
                       ),
                       const SizedBox(width: 8),
                       Text(

@@ -31,9 +31,9 @@ class StatisticsPage extends StatelessWidget {
 
   /// Gelar pemain berdasarkan total bintang.
   String _rank(int total) {
-    if (total >= 70) return _en ? 'Logic Master' : 'Master Logika';
-    if (total >= 40) return _en ? 'Logic Expert' : 'Ahli Logika';
-    if (total >= 15) return _en ? 'Logic Adventurer' : 'Petualang Logika';
+    if (total >= 35) return _en ? 'Logic Master' : 'Master Logika';
+    if (total >= 20) return _en ? 'Logic Expert' : 'Ahli Logika';
+    if (total >= 8) return _en ? 'Logic Adventurer' : 'Petualang Logika';
     if (total > 0) return _en ? 'Explorer' : 'Penjelajah';
     return _en ? 'Beginner' : 'Pemula';
   }
@@ -67,19 +67,16 @@ class StatisticsPage extends StatelessWidget {
     final int total = MapProgress.totalStars();
     final int maxTotal = MapProgress.maxTotalStars();
     final int completed = MapProgress.completedLevels();
-    final int advTotal = MapProgress.modeStars(GameMode.adventure);
-    final int logicTotal = MapProgress.modeStars(GameMode.logic);
-    final int maxMode = MapProgress.totalLevels * MapProgress.maxStars;
     final int readyRegions = MapProgress.readyRegions();
     final int unlockedRegions = List<int>.generate(
       MapProgress.regionCount,
       (int r) => r,
     ).where(MapProgress.isRegionUnlocked).length;
 
-    // Level & XP diturunkan dari bintang (6 bintang = 1 level).
-    final int level = 1 + total ~/ 6;
-    final int intoLevel = total % 6;
-    final double levelProgress = intoLevel / 6;
+    // Level & XP diturunkan dari bintang (3 bintang = 1 level).
+    final int level = 1 + total ~/ 3;
+    final int intoLevel = total % 3;
+    final double levelProgress = intoLevel / 3;
     final int xp = total * 100;
 
     final int percent = maxTotal == 0 ? 0 : (total / maxTotal * 100).round();
@@ -160,8 +157,8 @@ class StatisticsPage extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         _en
-                            ? '$intoLevel/6 stars to next level'
-                            : '$intoLevel/6 bintang menuju level berikutnya',
+                            ? '$intoLevel/3 stars to next level'
+                            : '$intoLevel/3 bintang menuju level berikutnya',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 11,
@@ -194,30 +191,6 @@ class StatisticsPage extends StatelessWidget {
                   iconColor: const Color(0xFF4DD7F7),
                   value: '$completed/${MapProgress.totalLevels}',
                   label: _en ? 'Levels Cleared' : 'Level Selesai',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          Row(
-            children: [
-              Expanded(
-                child: StatCard(
-                  icon: Icons.explore,
-                  iconColor: const Color(0xFF59C36A),
-                  value: '$advTotal/$maxMode',
-                  label: _en ? 'Adventure' : 'Petualangan',
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: StatCard(
-                  icon: Icons.widgets,
-                  iconColor: const Color(0xFFB07CFF),
-                  value: '$logicTotal/$maxMode',
-                  label: _en ? 'Logic Arena' : 'Arena Logika',
                 ),
               ),
             ],
@@ -266,9 +239,9 @@ class StatisticsPage extends StatelessWidget {
             _ProgressRow(
               label: '${r + 1}. ${_regionLabel(r)}',
               value: MapProgress.regionStars(r) /
-                  (MapProgress.levelsPerRegion * MapProgress.maxStars * 2),
+                  (MapProgress.levelsPerRegion * MapProgress.maxStars),
               progressText:
-                  '${MapProgress.regionStars(r)}/${MapProgress.levelsPerRegion * MapProgress.maxStars * 2}',
+                  '${MapProgress.regionStars(r)}/${MapProgress.levelsPerRegion * MapProgress.maxStars}',
               color: gameRegions[r].color,
             ),
             if (r < MapProgress.regionCount - 1) const SizedBox(height: 12),

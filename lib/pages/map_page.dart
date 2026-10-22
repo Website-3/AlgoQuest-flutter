@@ -1,33 +1,27 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/game_service.dart';
 import '../widgets/app_header.dart';
 import '../widgets/npc_dialog.dart';
 
 // ============================================================
-// MAP PAGE — PETA DUNIA
+// MAP PAGE â€” PETA DUNIA
 // ============================================================
-// 5 wilayah x 3 level = 15 level, tiap level punya 2 mode:
-//   - 🧭 Petualangan  (jelajah + tempur real-time)
-//   - 🧩 Arena Logika (susun blok perintah)
-// Bintang dihitung TERPISAH per mode.
+// 5 wilayah x 3 level = 15 level. Tiap level dimainkan dalam
+// mode Arena Logika (susun blok perintah untuk mengalahkan
+// monster).
 //
 // ATURAN PROGRES:
 //   1. Wilayah 1 terbuka dari awal.
 //   2. Di dalam 1 wilayah, level berikutnya terbuka begitu level
 //      sebelumnya selesai (bintang 1 pun cukup untuk membuka).
 //   3. Untuk PINDAH ke wilayah berikutnya, SEMUA level di wilayah
-//      ini harus minimal 2 bintang (dari mode mana pun, diambil
-//      yang terbaik).
+//      ini harus minimal 2 bintang.
 //   4. Progres disimpan ke perangkat (shared_preferences) & dimuat
 //      kembali saat aplikasi dibuka.
-
-/// Dua mode permainan untuk tiap level.
-enum GameMode { adventure, logic }
 
 // ============================================================
 // DATA WILAYAH
@@ -116,19 +110,15 @@ class MapProgress {
   /// progres berubah.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  /// Bintang tiap level & tiap mode.
+  /// Bintang tiap level.
   /// Index = wilayah * 3 + level. 0 = belum selesai.
-  static final List<int> adventureStars = List<int>.filled(totalLevels, 0);
-  static final List<int> logicStars = List<int>.filled(totalLevels, 0);
+  static final List<int> stars = List<int>.filled(totalLevels, 0);
 
   /// Wilayah yang cerita pembukanya sudah pernah ditampilkan.
   static final List<bool> storySeen = List<bool>.filled(regionCount, false);
 
   /// Level yang soalnya sudah dijawab dengan benar.
   static final List<bool> quizCorrect = List<bool>.filled(totalLevels, false);
-
-  static List<int> _modeList(GameMode mode) =>
-      mode == GameMode.adventure ? adventureStars : logicStars;
 
   static int indexOf(int region, int level) => region * levelsPerRegion + level;
 
@@ -143,8 +133,21 @@ class MapProgress {
       if (raw == null) return;
       final Object? decoded = jsonDecode(raw);
       if (decoded is! Map) return;
-      _readInto(adventureStars, decoded['adventure']);
-      _readInto(logicStars, decoded['logic']);
+
+      if (decoded['stars'] is List) {
+        _readInto(stars, decoded['stars']);
+      } else {
+        // Migrasi dari versi lama (2 mode): ambil bintang terbaik
+        // supaya progres pemain tidak hilang.
+        final List<int> adventure = List<int>.filled(totalLevels, 0);
+        final List<int> logic = List<int>.filled(totalLevels, 0);
+        _readInto(adventure, decoded['adventure']);
+        _readInto(logic, decoded['logic']);
+        for (var i = 0; i < totalLevels; i++) {
+          stars[i] = adventure[i] > logic[i] ? adventure[i] : logic[i];
+        }
+      }
+
       _readBoolInto(storySeen, decoded['story']);
       _readBoolInto(quizCorrect, decoded['quiz']);
       revision.value++;
@@ -176,8 +179,7 @@ class MapProgress {
       await prefs.setString(
         _prefsKey,
         jsonEncode(<String, Object>{
-          'adventure': adventureStars,
-          'logic': logicStars,
+          'stars': stars,
           'story': storySeen,
           'quiz': quizCorrect,
         }),
@@ -189,8 +191,7 @@ class MapProgress {
 
   /// Hapus seluruh progres dari memori (tidak menghapus penyimpanan).
   static void reset() {
-    adventureStars.fillRange(0, adventureStars.length, 0);
-    logicStars.fillRange(0, logicStars.length, 0);
+    stars.fillRange(0, stars.length, 0);
     storySeen.fillRange(0, storySeen.length, false);
     quizCorrect.fillRange(0, quizCorrect.length, false);
     revision.value++;
@@ -231,28 +232,19 @@ class MapProgress {
 
   // ---------- Baca/tulis bintang ----------
 
-  /// Bintang mode tertentu.
-  static int starsOf(int region, int level, GameMode mode) =>
-      _modeList(mode)[indexOf(region, level)];
+  /// Bintang level ini (0..3).
+  static int starsOf(int region, int level) => stars[indexOf(region, level)];
 
-  /// Bintang terbaik dari kedua mode (dipakai untuk membuka progres).
-  static int bestStarsOf(int region, int level) {
-    final int i = indexOf(region, level);
-    return adventureStars[i] > logicStars[i]
-        ? adventureStars[i]
-        : logicStars[i];
-  }
-
-  static void setStars(int region, int level, GameMode mode, int value) {
-    _modeList(mode)[indexOf(region, level)] = value.clamp(0, maxStars);
+  static void setStars(int region, int level, int value) {
+    stars[indexOf(region, level)] = value.clamp(0, maxStars);
     revision.value++;
     unawaited(save());
   }
 
-  /// Semua level di wilayah ini sudah >= 2 bintang (mode mana pun)?
+  /// Semua level di wilayah ini sudah >= 2 bintang?
   static bool isRegionReady(int region) {
     for (var level = 0; level < levelsPerRegion; level++) {
-      if (bestStarsOf(region, level) < requiredStars) return false;
+      if (starsOf(region, level) < requiredStars) return false;
     }
     return true;
   }
@@ -267,16 +259,14 @@ class MapProgress {
   static bool isLevelUnlocked(int region, int level) {
     if (!isRegionUnlocked(region)) return false;
     if (level == 0) return true;
-    return bestStarsOf(region, level - 1) >= 1;
+    return starsOf(region, level - 1) >= 1;
   }
 
-  /// Total bintang dalam 1 wilayah dari kedua mode (maks 18).
+  /// Total bintang dalam 1 wilayah (maks 9).
   static int regionStars(int region) {
     var total = 0;
     for (var level = 0; level < levelsPerRegion; level++) {
-      total +=
-          starsOf(region, level, GameMode.adventure) +
-          starsOf(region, level, GameMode.logic);
+      total += starsOf(region, level);
     }
     return total;
   }
@@ -284,33 +274,21 @@ class MapProgress {
   static int completedLevels() {
     var count = 0;
     for (var i = 0; i < totalLevels; i++) {
-      if (adventureStars[i] > 0 || logicStars[i] > 0) count++;
+      if (stars[i] > 0) count++;
     }
     return count;
   }
 
   static int totalStars() {
     var total = 0;
-    for (final int s in adventureStars) {
-      total += s;
-    }
-    for (final int s in logicStars) {
+    for (final int s in stars) {
       total += s;
     }
     return total;
   }
 
-  /// Total bintang untuk satu mode saja.
-  static int modeStars(GameMode mode) {
-    var total = 0;
-    for (final int s in _modeList(mode)) {
-      total += s;
-    }
-    return total;
-  }
-
-  /// Bintang maksimum seluruh peta (15 level x 3 bintang x 2 mode = 90).
-  static int maxTotalStars() => totalLevels * maxStars * 2;
+  /// Bintang maksimum seluruh peta (15 level x 3 bintang = 45).
+  static int maxTotalStars() => totalLevels * maxStars;
 
   /// Jumlah wilayah yang sudah siap pindah (semua level >= 2 bintang).
   static int readyRegions() {
@@ -330,13 +308,10 @@ class MapPage extends StatefulWidget {
   final VoidCallback onLanguageChanged;
   final VoidCallback? onBack;
 
-  /// Bila diisi, mengetuk level membuka dialog pilih mode
-  /// (Petualangan / Arena Logika), lalu memanggil ini. Bila null,
-  /// level langsung mensimulasikan kemenangan (3 bintang).
-  final void Function(int region, int level, GameMode mode)? onStartLevel;
-
-  /// Khusus uji/preview: buka otomatis dialog mode level ini saat dimuat.
-  final bool debugOpenDialog;
+  /// Bila diisi, mengetuk level langsung memulai Arena Logika lewat
+  /// callback ini. Bila null, level mensimulasikan kemenangan
+  /// (3 bintang) â€” berguna untuk pratinjau.
+  final void Function(int region, int level)? onStartLevel;
 
   const MapPage({
     super.key,
@@ -344,7 +319,6 @@ class MapPage extends StatefulWidget {
     required this.onLanguageChanged,
     this.onBack,
     this.onStartLevel,
-    this.debugOpenDialog = false,
   });
 
   @override
@@ -354,21 +328,10 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   bool get _en => widget.isEnglish;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.debugOpenDialog) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openLevel(0, 0);
-      });
-    }
-  }
-
   // ----------------------------------------------------------
-  // Ketuk level yang terbuka -> dialog pilih mode
+  // Ketuk level yang terbuka -> mulai Arena Logika
   // ----------------------------------------------------------
   Future<void> _openLevel(int region, int level) async {
-    final GameRegion r = gameRegions[region];
     final bool wasReady = MapProgress.isRegionReady(region);
 
     // Pertama kali memasuki wilayah ini -> perkenalan dari NPC.
@@ -378,21 +341,16 @@ class _MapPageState extends State<MapPage> {
       MapProgress.markStorySeen(region);
     }
 
-    final GameMode? mode = await showDialog<GameMode>(
-      context: context,
-      builder: (ctx) => _modeDialog(ctx, region, level, r),
-    );
+    if (!mounted) return;
 
-    if (!mounted || mode == null) return;
-
-    // Host sebenarnya -> buka halaman mode tersebut.
+    // Host sebenarnya -> buka halaman permainan.
     if (widget.onStartLevel != null) {
-      widget.onStartLevel!(region, level, mode);
+      widget.onStartLevel!(region, level);
       return;
     }
 
     // Tanpa host (mode demo) -> simulasikan kemenangan 3 bintang.
-    MapProgress.setStars(region, level, mode, 3);
+    MapProgress.setStars(region, level, 3);
     setState(() {});
     _announceRegion(region, wasReady);
   }
@@ -415,187 +373,6 @@ class _MapPageState extends State<MapPage> {
       );
   }
 
-  // ----------------------------------------------------------
-  // DIALOG PILIH MODE
-  // ----------------------------------------------------------
-  Widget _modeDialog(BuildContext ctx, int region, int level, GameRegion r) {
-    final MazeLevel maze = MazeCatalog.level(region, level);
-    final String monster = maze.monsterName(_en);
-    final String adventureMission = _en
-        ? 'Mission: defeat $monster (HP ${maze.enemyHp}), then answer the logic question.'
-        : 'Misi: kalahkan $monster (HP ${maze.enemyHp}), lalu jawab soalnya.';
-    final String logicMission = _en
-        ? 'Mission: defeat $monster (HP ${maze.enemyHp}) using at most ${maze.maxBlocks} blocks.'
-        : 'Misi: kalahkan $monster (HP ${maze.enemyHp}) dengan maksimal ${maze.maxBlocks} blok.';
-    return AlertDialog(
-      backgroundColor: const Color(0xFF202524),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: Row(
-        children: [
-          Icon(r.icon, color: r.color, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${r.name(_en)} - Level ${level + 1}',
-              style: const TextStyle(fontSize: 15, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              r.material(_en),
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 12.5,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _en ? 'Choose a mode:' : 'Pilih mode:',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _modeCard(
-              ctx: ctx,
-              region: region,
-              level: level,
-              mode: GameMode.adventure,
-              icon: Icons.explore,
-              color: const Color(0xFF42CFFF),
-              title: _en ? 'Adventure' : 'Petualangan',
-              desc: _en
-                  ? 'Roam the maze, fight the monster'
-                  : 'Jelajah labirin & kalahkan monster',
-              mission: adventureMission,
-            ),
-            const SizedBox(height: 10),
-            _modeCard(
-              ctx: ctx,
-              region: region,
-              level: level,
-              mode: GameMode.logic,
-              icon: Icons.extension,
-              color: const Color(0xFFFFB21A),
-              title: _en ? 'Logic Arena' : 'Arena Logika',
-              desc: _en ? 'Arrange command blocks' : 'Susun blok perintah',
-              mission: logicMission,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => showNpcStory(ctx, region: region, isEnglish: _en),
-          child: Text(
-            _en ? 'Story' : 'Cerita',
-            style: const TextStyle(color: Color(0xFF42CFFF)),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: Text(
-            _en ? 'Close' : 'Tutup',
-            style: const TextStyle(color: Colors.white70),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Kartu mode di dalam dialog (ikon + judul + deskripsi + bintang).
-  Widget _modeCard({
-    required BuildContext ctx,
-    required int region,
-    required int level,
-    required GameMode mode,
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String desc,
-    required String mission,
-  }) {
-    final int stars = MapProgress.starsOf(region, level, mode);
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => Navigator.of(ctx).pop(mode),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    desc,
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11.5,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.flag, color: color, size: 12),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          mission,
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 11,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _starRow(stars, size: 15),
-          ],
-        ),
-      ),
-    );
-  }
 
   /// Level terkunci disentuh -> beri tahu syaratnya.
   void _showLocked(int region, int level) {
@@ -670,7 +447,7 @@ class _MapPageState extends State<MapPage> {
   Widget _overviewCard() {
     final int done = MapProgress.completedLevels();
     final int stars = MapProgress.totalStars();
-    final int maxTotal = MapProgress.totalLevels * MapProgress.maxStars * 2;
+    final int maxTotal = MapProgress.totalLevels * MapProgress.maxStars;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -790,7 +567,7 @@ class _MapPageState extends State<MapPage> {
     final bool unlocked = MapProgress.isRegionUnlocked(region);
     final bool ready = unlocked && MapProgress.isRegionReady(region);
     final int stars = MapProgress.regionStars(region);
-    final int maxStars = MapProgress.levelsPerRegion * MapProgress.maxStars * 2;
+    final int maxStars = MapProgress.levelsPerRegion * MapProgress.maxStars;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -851,6 +628,17 @@ class _MapPageState extends State<MapPage> {
                   ],
                 ),
               ),
+
+              // Buka ulang cerita wilayah kapan saja.
+              if (unlocked)
+                IconButton(
+                  tooltip: _en ? 'Story' : 'Cerita',
+                  onPressed: () =>
+                      showNpcStory(context, region: region, isEnglish: _en),
+                  icon: const Icon(Icons.menu_book_rounded),
+                  color: r.color,
+                  visualDensity: VisualDensity.compact,
+                ),
             ],
           ),
 
@@ -995,7 +783,7 @@ class _MapPageState extends State<MapPage> {
   Widget _levelNode(int region, int level) {
     final GameRegion r = gameRegions[region];
     final bool unlocked = MapProgress.isLevelUnlocked(region, level);
-    final int stars = MapProgress.bestStarsOf(region, level);
+    final int stars = MapProgress.starsOf(region, level);
 
     final Color fill;
     final Color border;
@@ -1073,7 +861,7 @@ class _MapPageState extends State<MapPage> {
             const SizedBox(height: 4),
 
             if (unlocked)
-              _modeStarsMini(region, level)
+              _starRow(stars, size: 13)
             else
               Text(
                 _en ? 'Locked' : 'Terkunci',
@@ -1176,44 +964,8 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  /// Dua baris mini bintang di bawah tiap level: mode Petualangan & Arena Logika.
-  Widget _modeStarsMini(int region, int level) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _miniModeRow(
-          Icons.explore,
-          const Color(0xFF42CFFF),
-          MapProgress.starsOf(region, level, GameMode.adventure),
-        ),
-        const SizedBox(height: 2),
-        _miniModeRow(
-          Icons.extension,
-          const Color(0xFFFFB21A),
-          MapProgress.starsOf(region, level, GameMode.logic),
-        ),
-      ],
-    );
-  }
-
-  Widget _miniModeRow(IconData icon, Color color, int value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 11, color: color),
-        const SizedBox(width: 4),
-        for (var i = 0; i < 3; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0.5),
-            child: Icon(
-              i < value ? Icons.star_rounded : Icons.star_border_rounded,
-              size: 11,
-              color: i < value ? const Color(0xFFFFC15C) : Colors.white24,
-            ),
-          ),
-      ],
-    );
-  }
+  /// Dua baris mini bintang di bawah tiap level sudah digantikan satu
+  /// baris [_starRow] karena kini hanya ada satu mode.
 
   // ----------------------------------------------------------
   // KOTAK INFO

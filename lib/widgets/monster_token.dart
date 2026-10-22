@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 // ============================================================
-// MONSTER TOKEN — IBLIS BERTANDUK (memakai gambar PNG)
+// MONSTER TOKEN â€” IBLIS BERTANDUK (memakai gambar PNG)
 // ============================================================
 // Bayangan lantai, kilat putih saat terkena serangan, dan mata X saat
 // kalah tetap dipertahankan. Tubuh monster berasal dari gambar.
 // API widget tidak berubah (size, flash, defeated, tint), jadi dipakai
-// bersama Mode Petualangan & Arena Logika tanpa perubahan di sana.
+// bersama Arena Logika tanpa perubahan di sana.
 
 // ---------- SETELAN GAMBAR (ubah di sini) ----------
 /// Nama file gambar monster di assets/images/ (ganti sesuai nama file aslimu).
@@ -58,7 +58,7 @@ class MonsterToken extends StatelessWidget {
       _kMonsterAsset,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
-      errorBuilder: (_, __, ___) =>
+      errorBuilder: (_, _, _) =>
           Icon(Icons.pest_control, size: size * 0.8, color: tint),
     );
 

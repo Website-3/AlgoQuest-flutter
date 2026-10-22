@@ -122,4 +122,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('SOAL LOGIKA'), findsOneWidget);
   });
+
+  testWidgets('arena mengisi hampir seluruh lebar layar ponsel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(wrap());
+    await tester.pump();
+
+    final Size arena = tester.getSize(
+      find.byKey(const ValueKey<String>('maze_arena')),
+    );
+
+    // Arena harus hampir selebar layar (hanya menyisakan padding tipis),
+    // dan tetap persegi agar labirin tidak gepeng.
+    expect(arena.width, greaterThan(375));
+    expect(arena.width, lessThanOrEqualTo(390));
+    expect(arena.height, closeTo(arena.width, 0.5));
+  });
 }

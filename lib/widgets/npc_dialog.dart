@@ -8,7 +8,8 @@ import '../services/story_service.dart';
 // ============================================================
 // Menampilkan gambar Profesor Bit (logo_npc.png), narasi wilayah,
 // dan satu petunjuk logika. Dipakai saat pemain pertama membuka
-// sebuah wilayah, dan bisa dibuka ulang dari dialog pilih mode.
+// sebuah wilayah, dan bisa dibuka ulang lewat ikon buku pada kartu
+// wilayah di Peta.
 
 const Color _kCard = Color(0xFF1D2221);
 const Color _kCyan = Color(0xFF42CFFF);

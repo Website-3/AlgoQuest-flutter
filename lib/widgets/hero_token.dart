@@ -1,14 +1,14 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 // ============================================================
-// HERO TOKEN — KSATRIA (memakai gambar PNG)
+// HERO TOKEN â€” KSATRIA (memakai gambar PNG)
 // ============================================================
 // Bayangan lantai, cahaya cyan, dan panah arah tetap dipertahankan.
 // Tubuh karakter berasal dari gambar. API widget tidak berubah
-// (size, facing, arrowColor, showArrow), jadi adventure_page.dart
-// tidak perlu diubah.
+// (size, facing, arrowColor, showArrow), jadi Arena Logika tidak
+// perlu diubah.
 
 const Color _kCyan = Color(0xFF42CFFF);
 
@@ -60,7 +60,7 @@ class HeroToken extends StatelessWidget {
       _kHeroAsset,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
-      errorBuilder: (_, __, ___) =>
+      errorBuilder: (_, _, _) =>
           Icon(Icons.shield, size: size * 0.8, color: arrowColor),
     );
     if (flip) {

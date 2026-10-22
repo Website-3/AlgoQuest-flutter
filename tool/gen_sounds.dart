@@ -30,6 +30,7 @@ void main() {
     'defeat': _defeat(),
     'star': _star(),
     'error': _error(),
+    'bgm': _bgm(),
   };
 
   sounds.forEach((String name, Float64List buf) {
@@ -188,6 +189,52 @@ Float64List _error() {
   _tone(b, start: 0, dur: 0.09, f0: 150, amp: 0.4, wave: 'square', decay: 18);
   _tone(b, start: 0.12, dur: 0.12, f0: 120, amp: 0.4, wave: 'square',
       decay: 16);
+  return b;
+}
+
+Float64List _bgm() {
+  // Loop melodi petualangan logika (16 ketukan ~ 9.6 detik).
+  const double beat = 0.6;
+  final Float64List b = _buf(16 * beat);
+
+  // Bass line (akord: C - G - Am - F)
+  const List<double> bass = <double>[130.81, 98.00, 110.00, 87.31];
+  for (int bar = 0; bar < 4; bar++) {
+    _tone(b, start: bar * 4 * beat, dur: 4 * beat, f0: bass[bar], amp: 0.22, wave: 'sine', decay: 1.2);
+  }
+
+  // Arpeggio pengiring (triangle, lembut & berirama)
+  final List<List<double>> arpChords = <List<double>>[
+    <double>[261.63, 329.63, 392.00, 523.25], // C4, E4, G4, C5
+    <double>[246.94, 293.66, 392.00, 493.88], // B3, D4, G4, B4
+    <double>[220.00, 261.63, 329.63, 440.00], // A3, C4, E4, A4
+    <double>[174.61, 261.63, 349.23, 440.00], // F3, C4, F4, A4
+  ];
+
+  for (int bar = 0; bar < 4; bar++) {
+    final List<double> chord = arpChords[bar];
+    for (int step = 0; step < 8; step++) {
+      final double t = (bar * 4 + step * 0.5) * beat;
+      final double f = chord[step % 4];
+      _tone(b, start: t, dur: 0.45, f0: f, amp: 0.10, wave: 'tri', decay: 4);
+    }
+  }
+
+  // Melodi utama petualangan (ramah, santai, dan edukatif)
+  final List<List<double>> melodyNotes = <List<double>>[
+    <double>[523.25, 659.25, 783.99, 659.25], // C5, E5, G5, E5
+    <double>[587.33, 783.99, 493.88, 587.33], // D5, G5, B4, D5
+    <double>[659.25, 880.00, 523.25, 659.25], // E5, A5, C5, E5
+    <double>[698.46, 880.00, 783.99, 587.33], // F5, A5, G5, D5
+  ];
+
+  for (int bar = 0; bar < 4; bar++) {
+    for (int note = 0; note < 4; note++) {
+      final double t = (bar * 4 + note) * beat;
+      _tone(b, start: t, dur: 0.55 * beat, f0: melodyNotes[bar][note], amp: 0.20, wave: 'sine', decay: 2.2);
+    }
+  }
+
   return b;
 }
 

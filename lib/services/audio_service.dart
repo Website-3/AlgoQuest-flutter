@@ -68,4 +68,63 @@ class GameAudio {
       // diabaikan
     }
   }
+
+  // ==========================================================
+  // MUSIK PENGIRING (BGM)
+  // ==========================================================
+  AudioPlayer? _bgmPlayer;
+  bool _bgmPlaying = false;
+  double bgmVolume = 0.35;
+  bool bgmEnabled = true;
+
+  /// Putar musik pengiring aplikasi secara berulang (loop).
+  Future<void> startBgm() async {
+    if (!bgmEnabled || _bgmPlaying) return;
+    try {
+      _bgmPlayer ??= AudioPlayer();
+      _ignore(_bgmPlayer!.setReleaseMode(ReleaseMode.loop));
+      _ignore(_bgmPlayer!.setVolume(bgmVolume));
+      _ignore(_bgmPlayer!.play(AssetSource('audio/bgm.wav')));
+      _bgmPlaying = true;
+    } catch (_) {
+      // diabaikan
+    }
+  }
+
+  /// Hentikan musik pengiring.
+  Future<void> stopBgm() async {
+    try {
+      if (_bgmPlayer != null) {
+        _ignore(_bgmPlayer!.stop());
+      }
+    } catch (_) {
+      // diabaikan
+    }
+    _bgmPlaying = false;
+  }
+
+  /// Jeda musik pengiring saat aplikasi ke latar belakang.
+  Future<void> pauseBgm() async {
+    try {
+      if (_bgmPlayer != null && _bgmPlaying) {
+        _ignore(_bgmPlayer!.pause());
+      }
+    } catch (_) {
+      // diabaikan
+    }
+  }
+
+  /// Lanjutkan musik pengiring saat aplikasi kembali aktif.
+  Future<void> resumeBgm() async {
+    if (!bgmEnabled) return;
+    try {
+      if (_bgmPlayer != null && _bgmPlaying) {
+        _ignore(_bgmPlayer!.resume());
+      } else {
+        startBgm();
+      }
+    } catch (_) {
+      // diabaikan
+    }
+  }
 }

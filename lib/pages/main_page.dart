@@ -88,7 +88,7 @@ class _MainPageState extends State<MainPage> {
           changePage(1);
         },
 
-        // SETTINGS -> HALAMAN PENGATURAN
+        // SETTINGS -> HALAMAN PENGATURAN (INDEX 4)
         onSettingsPressed: () {
           changePage(4);
         },
@@ -114,11 +114,12 @@ class _MainPageState extends State<MainPage> {
         username: widget.username,
       ),
 
-      // INDEX 4: SETTINGS
+      // INDEX 4: SETTINGS (SUB PAGE)
       SettingsPage(
         isEnglish: isEnglish,
         onLanguageChanged: changeLanguage,
         onLogout: _logout,
+        onBack: () => changePage(0),
       ),
 
       // INDEX 5: MAP
@@ -189,7 +190,7 @@ class _MainPageState extends State<MainPage> {
                 BottomNavigationBarItem(
                   icon: const Icon(Icons.insights_outlined),
                   activeIcon: const Icon(Icons.insights),
-                  label: 'Statistics',
+                  label: 'Statistic',
                 ),
                 BottomNavigationBarItem(
                   icon: const Icon(Icons.person_outline),

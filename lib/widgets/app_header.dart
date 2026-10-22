@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 // ============================================================
@@ -148,37 +147,9 @@ class AppHeader extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(width: 8),
-
-            // ENERGY
-            Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: const Row(
-                children: [
-                  Text(
-                    '⚡',
-                    style: TextStyle(fontSize: 17),
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    '42',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             // SETTINGS
             if (onSettingsPressed != null) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed: onSettingsPressed,
                 tooltip: isEnglish ? 'Settings' : 'Pengaturan',

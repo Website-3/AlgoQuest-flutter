@@ -9,8 +9,8 @@ class QuestPage extends StatelessWidget {
   final bool isEnglish;
   final VoidCallback onLanguageChanged;
   final VoidCallback onStartPressed;
-  final VoidCallback onPanduanPressed;
-  final VoidCallback onMateriPressed;
+  final VoidCallback? onPanduanPressed;
+  final VoidCallback? onMateriPressed;
 
   // SETTINGS
   final VoidCallback onSettingsPressed;
@@ -20,8 +20,8 @@ class QuestPage extends StatelessWidget {
     required this.isEnglish,
     required this.onLanguageChanged,
     required this.onStartPressed,
-    required this.onPanduanPressed,
-    required this.onMateriPressed,
+    this.onPanduanPressed,
+    this.onMateriPressed,
     required this.onSettingsPressed,
   });
 
@@ -131,7 +131,7 @@ class QuestPage extends StatelessWidget {
                     const SizedBox(height: 14),
 
                     // ==================================================
-                    // TOMBOL PANDUAN PERMAINAN
+                    // TOMBOL PANDUAN PERMAINAN (KOTAK BIRU)
                     // ==================================================
                     SizedBox(
                       width: double.infinity,
@@ -149,7 +149,7 @@ class QuestPage extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Icon(Icons.menu_book),
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 8),
                             Text(
                               isEnglish
                                   ? 'Game Guide'

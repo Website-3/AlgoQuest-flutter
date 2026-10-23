@@ -4,302 +4,633 @@ import '../services/juice.dart';
 import '../services/quiz_service.dart';
 
 // ============================================================
-// DIALOG SOAL LOGIKA
+// DIALOG KUIS 15 LEVEL — ALGOQUEST
 // ============================================================
-// Menampilkan satu soal pilihan ganda setelah monster dikalahkan.
-// Pemain memilih satu jawaban, lalu melihat benar/salah beserta
-// penjelasannya. Mengembalikan true bila jawabannya benar.
+// Menampilkan kuis 5 soal setelah monster dikalahkan di setiap
+// level (Level 1 sampai Level 15).
+// Fitur:
+//   - Judul "Monster Dikalahkan!"
+//   - Label Level & Tingkat Kesulitan (Pemula / Menengah / Sulit)
+//   - Indikator progres "Soal X dari 5"
+//   - 4 Pilihan ganda (A, B, C, D) dengan 1 jawaban benar
+//   - Umpan balik langsung & penjelasan edukatif
+//   - Skor akhir & penyelesaian khusus Level 15 (Final Game)
 
-const Color _kCard = Color(0xFF1D2221);
-const Color _kSoft = Color(0xFF283130);
+const Color _kCard = Color(0xFF131818);
+const Color _kSoft = Color(0xFF1F2727);
 const Color _kCyan = Color(0xFF42CFFF);
 const Color _kGreen = Color(0xFF59C36A);
 const Color _kPink = Color(0xFFFF5E7E);
-const Color _kText = Color(0xFFDDE7E9);
-const Color _kMuted = Color(0xFF8A9795);
+const Color _kGold = Color(0xFFFFC043);
+const Color _kText = Color(0xFFE2EDEF);
+const Color _kMuted = Color(0xFF8D9C9A);
 
-/// Buka dialog soal. Mengembalikan apakah pemain menjawab benar
-/// (false bila dialog ditutup tanpa menjawab).
+/// Buka dialog kuis level setelah monster dikalahkan.
+/// Mengembalikan true bila kuis berhasil diselesaikan.
 Future<bool> showQuizDialog(
   BuildContext context, {
   required int region,
   required int level,
   required bool isEnglish,
 }) async {
-  final QuizQuestion q = QuizCatalog.question(region, level);
-  final bool? correct = await showDialog<bool>(
+  final int globalLevel = region * 3 + level + 1;
+  final LevelQuizSet quizSet =
+      QuizCatalog.getQuizByRegionAndLevel(region, level);
+
+  final bool? result = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (BuildContext ctx) =>
-        _QuizDialog(question: q, isEnglish: isEnglish),
+    builder: (BuildContext ctx) => _LevelQuizDialog(
+      quizSet: quizSet,
+      globalLevel: globalLevel,
+      isEnglish: isEnglish,
+      isFinalLevel: globalLevel == 15,
+    ),
   );
-  return correct ?? false;
+  return result ?? false;
 }
 
-class _QuizDialog extends StatefulWidget {
-  final QuizQuestion question;
+class _LevelQuizDialog extends StatefulWidget {
+  final LevelQuizSet quizSet;
+  final int globalLevel;
   final bool isEnglish;
+  final bool isFinalLevel;
 
-  const _QuizDialog({required this.question, required this.isEnglish});
+  const _LevelQuizDialog({
+    required this.quizSet,
+    required this.globalLevel,
+    required this.isEnglish,
+    required this.isFinalLevel,
+  });
 
   @override
-  State<_QuizDialog> createState() => _QuizDialogState();
+  State<_LevelQuizDialog> createState() => _LevelQuizDialogState();
 }
 
-class _QuizDialogState extends State<_QuizDialog> {
-  /// Index pilihan yang sudah ditekan (null = belum menjawab).
+class _LevelQuizDialogState extends State<_LevelQuizDialog> {
+  int _currentIndex = 0;
   int? _picked;
+  int _correctCount = 0;
+  bool _isFinished = false;
 
   bool get _en => widget.isEnglish;
-  QuizQuestion get q => widget.question;
+  List<QuizQuestion> get _questions => widget.quizSet.questions;
+  QuizQuestion get _currentQ => _questions[_currentIndex];
 
-  void _pick(int index) {
+  void _pickOption(int index) {
     if (_picked != null) return;
-    setState(() => _picked = index);
-    if (index == q.correct) {
-      Juice.star();
+    setState(() {
+      _picked = index;
+      if (index == _currentQ.correct) {
+        _correctCount++;
+        Juice.star();
+      } else {
+        Juice.error();
+      }
+    });
+  }
+
+  void _nextQuestion() {
+    Juice.click();
+    if (_currentIndex < _questions.length - 1) {
+      setState(() {
+        _currentIndex++;
+        _picked = null;
+      });
     } else {
-      Juice.error();
+      // Selesai seluruh 5 soal
+      setState(() {
+        _isFinished = true;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool answered = _picked != null;
-    final bool isCorrect = _picked == q.correct;
-    final List<String> options = q.options(_en);
     final Size size = MediaQuery.of(context).size;
 
     return Dialog(
       backgroundColor: _kCard,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(
+          color: widget.isFinalLevel ? _kGold : _kCyan.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+      ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: size.height * 0.82),
+        constraints: BoxConstraints(
+          maxWidth: 580,
+          maxHeight: size.height * 0.88,
+        ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // ---- KEPALA ----
-              Row(
-                children: <Widget>[
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: _kCyan.withValues(alpha: 0.16),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.quiz_rounded,
-                        color: _kCyan, size: 26),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          _en ? 'LOGIC QUESTION' : 'SOAL LOGIKA',
-                          style: const TextStyle(
-                            color: _kCyan,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _en ? 'Answer to earn bonus' : 'Jawab untuk bonus',
-                          style: const TextStyle(color: _kMuted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      // ---- PERTANYAAN ----
-                      Text(
-                        q.question(_en),
-                        style: const TextStyle(
-                          color: _kText,
-                          fontSize: 15,
-                          height: 1.4,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // ---- PILIHAN ----
-                      for (int i = 0; i < options.length; i++) ...[
-                        _optionButton(i),
-                        if (i < options.length - 1) const SizedBox(height: 8),
-                      ],
-
-                      // ---- PENJELASAN ----
-                      if (answered) ...[
-                        const SizedBox(height: 14),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: (isCorrect ? _kGreen : _kPink)
-                                .withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: (isCorrect ? _kGreen : _kPink)
-                                  .withValues(alpha: 0.6),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  Icon(
-                                    isCorrect
-                                        ? Icons.check_circle
-                                        : Icons.cancel,
-                                    color: isCorrect ? _kGreen : _kPink,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    isCorrect
-                                        ? (_en
-                                              ? 'Correct!'
-                                              : 'Benar!')
-                                        : (_en
-                                              ? 'Not quite.'
-                                              : 'Belum tepat.'),
-                                    style: TextStyle(
-                                      color: isCorrect ? _kGreen : _kPink,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                q.explanation(_en),
-                                style: const TextStyle(
-                                  color: _kText,
-                                  fontSize: 12.5,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ---- TOMBOL LANJUT ----
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: answered
-                      ? () {
-                          Juice.click();
-                          Navigator.of(context).pop(isCorrect);
-                        }
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _kCyan,
-                    foregroundColor: Colors.black,
-                    disabledBackgroundColor: _kSoft,
-                    disabledForegroundColor: _kMuted,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    answered
-                        ? (_en ? 'Continue \u25B8' : 'Lanjut \u25B8')
-                        : (_en ? 'Pick an answer' : 'Pilih jawaban'),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          child: _isFinished ? _buildResultView() : _buildQuestionView(),
         ),
       ),
     );
   }
 
-  Widget _optionButton(int index) {
+  // ==========================================================
+  // TAMPILAN PERTANYAAN
+  // ==========================================================
+  Widget _buildQuestionView() {
     final bool answered = _picked != null;
-    final bool isThisCorrect = index == q.correct;
+    final bool isCorrect = _picked == _currentQ.correct;
+    final List<String> options = _currentQ.options(_en);
+    final String diff = widget.quizSet.difficulty(_en);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        // ---- HEADER PERTANYAAN ----
+        Row(
+          children: <Widget>[
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _kGold.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+                border: Border.all(color: _kGold.withValues(alpha: 0.5)),
+              ),
+              child: const Icon(
+                Icons.emoji_events_rounded,
+                color: _kGold,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _en ? 'Monster Defeated!' : 'Monster Dikalahkan!',
+                    style: const TextStyle(
+                      color: _kGold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _kCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border:
+                          Border.all(color: _kCyan.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _en
+                          ? 'Quiz Level ${widget.globalLevel} — $diff'
+                          : 'Kuis Level ${widget.globalLevel} — $diff',
+                      style: const TextStyle(
+                        color: _kCyan,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Indikator Progres Soal
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: _kSoft,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Text(
+                _en
+                    ? 'Q ${_currentIndex + 1}/5'
+                    : 'Soal ${_currentIndex + 1}/5',
+                style: const TextStyle(
+                  color: _kText,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // Garis Bar Progres Soal
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (_currentIndex + 1) / _questions.length,
+            minHeight: 5,
+            backgroundColor: _kSoft,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              widget.isFinalLevel ? _kGold : _kCyan,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // ---- KONTEN PERTANYAAN (SCROLLABLE) ----
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // Kotak Teks Pertanyaan
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _kSoft,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Text(
+                    _currentQ.question(_en),
+                    style: const TextStyle(
+                      color: _kText,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // 4 Pilihan Jawaban
+                for (int i = 0; i < options.length; i++) ...[
+                  _buildOptionTile(i, options[i]),
+                  if (i < options.length - 1) const SizedBox(height: 8),
+                ],
+
+                // Kotak Umpan Balik & Penjelasan Edukatif
+                if (answered) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (isCorrect ? _kGreen : _kPink)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: (isCorrect ? _kGreen : _kPink)
+                            .withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Icon(
+                              isCorrect ? Icons.check_circle : Icons.cancel,
+                              color: isCorrect ? _kGreen : _kPink,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isCorrect
+                                  ? (_en ? 'Correct!' : 'Benar!')
+                                  : (_en ? 'Not quite right.' : 'Belum tepat.'),
+                              style: TextStyle(
+                                color: isCorrect ? _kGreen : _kPink,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _currentQ.explanation(_en),
+                          style: const TextStyle(
+                            color: _kText,
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // ---- TOMBOL LANJUT ----
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: answered ? _nextQuestion : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kCyan,
+              foregroundColor: Colors.black,
+              disabledBackgroundColor: _kSoft,
+              disabledForegroundColor: _kMuted,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              answered
+                  ? (_currentIndex < _questions.length - 1
+                      ? (_en ? 'Next Question \u25B8' : 'Soal Berikutnya \u25B8')
+                      : (_en
+                          ? 'View Quiz Results \u25B8'
+                          : 'Lihat Hasil Kuis \u25B8'))
+                  : (_en
+                      ? 'Pick an answer above'
+                      : 'Pilih salah satu jawaban di atas'),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================================
+  // TOMBOL PILIHAN JAWABAN (A, B, C, D)
+  // ==========================================================
+  Widget _buildOptionTile(int index, String optionText) {
+    final bool answered = _picked != null;
+    final bool isThisCorrect = index == _currentQ.correct;
     final bool isThisPicked = index == _picked;
 
-    Color border = _kCyan.withValues(alpha: 0.4);
-    Color fill = _kCyan.withValues(alpha: 0.08);
+    Color border = _kCyan.withValues(alpha: 0.3);
+    Color fill = _kSoft;
     Color textColor = _kText;
-    Widget? trail;
+    Widget? icon;
 
     if (answered) {
       if (isThisCorrect) {
         border = _kGreen;
         fill = _kGreen.withValues(alpha: 0.16);
-        trail = const Icon(Icons.check_circle, color: _kGreen, size: 20);
+        textColor = Colors.white;
       } else if (isThisPicked) {
         border = _kPink;
         fill = _kPink.withValues(alpha: 0.16);
-        trail = const Icon(Icons.cancel, color: _kPink, size: 20);
+        textColor = Colors.white;
+        icon = const Icon(Icons.cancel, color: _kPink, size: 20);
       } else {
-        border = _kSoft;
-        fill = Colors.transparent;
+        border = Colors.white10;
+        fill = _kSoft.withValues(alpha: 0.5);
         textColor = _kMuted;
       }
     }
 
+    final String letter = String.fromCharCode(65 + index);
+
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: answered ? null : () => _pick(index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      onTap: answered ? null : () => _pickOption(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
           color: fill,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: border),
+          border: Border.all(color: border, width: isThisCorrect ? 1.5 : 1),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              String.fromCharCode(65 + index),
-              style: TextStyle(
-                color: border == _kSoft ? _kMuted : border,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
+            Container(
+              width: 24,
+              height: 24,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isThisCorrect
+                    ? _kGreen
+                    : (isThisPicked
+                        ? _kPink
+                        : _kCyan.withValues(alpha: 0.15)),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                letter,
+                style: TextStyle(
+                  color: (isThisCorrect || isThisPicked)
+                      ? Colors.black
+                      : _kCyan,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12.5,
+                ),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                q.options(_en)[index],
-                style: TextStyle(color: textColor, fontSize: 13.5),
+                optionText,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 13.5,
+                  height: 1.35,
+                ),
               ),
             ),
-            if (trail != null) ...[const SizedBox(width: 8), trail],
+            if (icon != null) ...[
+              const SizedBox(width: 8),
+              icon,
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // TAMPILAN HASIL SKOR / PENYELESAIAN GAME (LEVEL 15)
+  // ==========================================================
+  Widget _buildResultView() {
+    final int score = ((_correctCount / _questions.length) * 100).round();
+    final bool isPassed = _correctCount >= 3;
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          const SizedBox(height: 10),
+
+          // Icon Trofi Kemenangan
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: (widget.isFinalLevel ? _kGold : _kCyan)
+                  .withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: (widget.isFinalLevel ? _kGold : _kCyan),
+                width: 2,
+              ),
+            ),
+            child: Icon(
+              widget.isFinalLevel
+                  ? Icons.military_tech_rounded
+                  : Icons.emoji_events_rounded,
+              color: widget.isFinalLevel ? _kGold : _kCyan,
+              size: 42,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Judul Hasil
+          Text(
+            widget.isFinalLevel
+                ? (_en
+                    ? '\u{1F3C6} CONGRATULATIONS! GAME COMPLETE!'
+                    : '\u{1F3C6} SELAMAT! GAME SELESAI!')
+                : (_en ? 'Quiz Completed!' : 'Kuis Selesai!'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: widget.isFinalLevel ? _kGold : _kText,
+              fontWeight: FontWeight.bold,
+              fontSize: widget.isFinalLevel ? 18 : 19,
+              letterSpacing: 0.5,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          // Subjudul
+          Text(
+            widget.isFinalLevel
+                ? (_en
+                    ? 'You conquered all 15 Levels of Algorithm Forest and defeated Logic Behemoth!'
+                    : 'Kamu telah menuntaskan seluruh 15 Level Hutan Algoritma dan mengalahkan Behemoth Logika!')
+                : (_en
+                    ? 'Level ${widget.globalLevel} Evaluation — ${widget.quizSet.difficultyEn}'
+                    : 'Hasil Evaluasi Level ${widget.globalLevel} — ${widget.quizSet.difficultyId}'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _kMuted,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Kartu Skor
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: _kSoft,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: widget.isFinalLevel
+                    ? _kGold.withValues(alpha: 0.5)
+                    : Colors.white12,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: <Widget>[
+                // Skor Angka
+                Column(
+                  children: <Widget>[
+                    Text(
+                      '$score',
+                      style: TextStyle(
+                        color: isPassed ? _kGreen : _kPink,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _en ? 'Score' : 'Skor Akhir',
+                      style: const TextStyle(color: _kMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+                Container(
+                  width: 1,
+                  height: 44,
+                  color: Colors.white12,
+                ),
+                // Jawaban Benar
+                Column(
+                  children: <Widget>[
+                    Text(
+                      '$_correctCount/5',
+                      style: const TextStyle(
+                        color: _kCyan,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _en ? 'Correct Answers' : 'Jawaban Benar',
+                      style: const TextStyle(color: _kMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 22),
+
+          // Tombol Aksi Akhir
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: () {
+                Juice.click();
+                Navigator.of(context).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.isFinalLevel ? _kGold : _kCyan,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Text(
+                    widget.isFinalLevel
+                        ? (_en
+                            ? 'Finish & Return to Menu'
+                            : 'Selesai & Kembali ke Menu')
+                        : (_en
+                            ? 'Continue to Next Level \u25B8'
+                            : 'Lanjut ke Level Berikutnya \u25B8'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
       ),
     );
   }

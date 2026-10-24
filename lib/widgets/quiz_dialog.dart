@@ -310,6 +310,41 @@ class _LevelQuizDialogState extends State<_LevelQuizDialog> {
                           ],
                         ),
                         const SizedBox(height: 6),
+                        // Tampilkan jawaban yang benar jika jawaban salah
+                        if (!isCorrect) ...[ 
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: _kGreen.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: _kGreen.withValues(alpha: 0.5)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Icon(Icons.check_circle_outline,
+                                    color: _kGreen, size: 15),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    _en
+                                        ? 'Correct answer: . '
+                                        : 'Jawaban yang benar: . ',
+                                    style: const TextStyle(
+                                      color: _kGreen,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         Text(
                           _currentQ.explanation(_en),
                           style: const TextStyle(
@@ -380,20 +415,19 @@ class _LevelQuizDialogState extends State<_LevelQuizDialog> {
     Widget? icon;
 
     if (answered) {
-      if (isThisCorrect) {
-        border = _kGreen;
-        fill = _kGreen.withValues(alpha: 0.16);
-        textColor = Colors.white;
-      } else if (isThisPicked) {
+      if (isThisPicked && !isThisCorrect) {
+        // Pilihan yang dipilih tapi salah → warna merah/pink
         border = _kPink;
         fill = _kPink.withValues(alpha: 0.16);
         textColor = Colors.white;
         icon = const Icon(Icons.cancel, color: _kPink, size: 20);
-      } else {
+      } else if (!isThisPicked) {
+        // Pilihan yang tidak dipilih → warna netral redup
         border = Colors.white10;
         fill = _kSoft.withValues(alpha: 0.5);
         textColor = _kMuted;
       }
+      // isThisPicked && isThisCorrect → tetap warna default (cyan/biru netral)
     }
 
     final String letter = String.fromCharCode(65 + index);
@@ -417,17 +451,16 @@ class _LevelQuizDialogState extends State<_LevelQuizDialog> {
               height: 24,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isThisCorrect
-                    ? _kGreen
-                    : (isThisPicked
-                        ? _kPink
-                        : _kCyan.withValues(alpha: 0.15)),
+                // Kotak huruf: pink jika salah pilih, cyan default untuk semua
+                color: (isThisPicked && !isThisCorrect)
+                    ? _kPink
+                    : _kCyan.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 letter,
                 style: TextStyle(
-                  color: (isThisCorrect || isThisPicked)
+                  color: (isThisPicked && !isThisCorrect)
                       ? Colors.black
                       : _kCyan,
                   fontWeight: FontWeight.bold,
